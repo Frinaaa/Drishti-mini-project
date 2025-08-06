@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "mobile-app",
+    "slug": "dristhi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d6fe127c-91fa-40cb-bdf0-95f60c60c84c"
+      }
+    },
+    "owner": "jahanasherin"
+  }
+}
