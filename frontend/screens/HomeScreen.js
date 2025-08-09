@@ -7,17 +7,17 @@ const roles = [
   {
     title: 'Police Officer',
     desc: 'Access and manage missing person cases.',
-    image: require('../assets/police.png'),
+    image: require('./assets/police.png'), // ✅ forward slash
   },
   {
     title: 'NGO Volunteer',
     desc: 'Assist in search and support efforts.',
-    image: require('../assets/ngo.png'),
+    image: require('./assets/ngo.png'), // ✅ forward slash
   },
   {
     title: 'Family Member',
     desc: 'Report and track missing loved ones.',
-    image: require('../assets/family.png'),
+    image: require('./assets/family.png'), // ✅ forward slash
   },
 ];
 
@@ -39,15 +39,20 @@ export default function HomeScreen({ navigation }) {
             <View style={styles.textBox}>
               <Text style={styles.role}>{role.title}</Text>
               <Text style={styles.desc}>{role.desc}</Text>
-
-              {role.title === 'Police Officer' && (
-                <TouchableOpacity
-                  style={styles.button}
-                  onPress={() => navigation.navigate('PoliceLogin')}
-                >
-                  <Text style={styles.buttonText}>Log In</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={styles.button}
+                onPress={() => {
+                  if (role.title === 'Police Officer') {
+                    navigation.navigate('PoliceLogin');
+                  } else if (role.title === 'NGO Volunteer') {
+                    navigation.navigate('NGOLogin');
+                  } else if (role.title === 'Family Member') {
+                    navigation.navigate('FamilyLogin');
+                  }
+                }}
+              >
+                <Text style={styles.buttonText}>Login</Text>
+              </TouchableOpacity>
             </View>
             <Image source={role.image} style={styles.image} resizeMode="cover" />
           </View>
