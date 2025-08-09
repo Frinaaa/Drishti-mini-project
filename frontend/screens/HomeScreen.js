@@ -7,17 +7,17 @@ const roles = [
   {
     title: 'Police Officer',
     desc: 'Access and manage missing person cases.',
-    image: require('./assets/police.png'), // ✅ forward slash
+    image: require('../assets/police.png'), // ✅ forward slash
   },
   {
     title: 'NGO Volunteer',
     desc: 'Assist in search and support efforts.',
-    image: require('./assets/ngo.png'), // ✅ forward slash
+    image: require('../assets/ngo.png'), // ✅ forward slash
   },
   {
     title: 'Family Member',
     desc: 'Report and track missing loved ones.',
-    image: require('./assets/family.png'), // ✅ forward slash
+    image: require('../assets/family.png'), // ✅ forward slash
   },
 ];
 

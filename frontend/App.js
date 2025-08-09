@@ -8,7 +8,6 @@ import { Ionicons } from '@expo/vector-icons';
 // Screens
 import HomeScreen from './screens/HomeScreen';
 import AboutUsScreen from './screens/AboutUsScreen';
-
 import PoliceLoginScreen from './screens/PoliceLogin';
 import NGOLoginScreen from './screens/NgoLoginScreen';
 import FamilyLoginScreen from './screens/FamilyLoginScreen';
@@ -18,101 +17,85 @@ import OTPVerificationScreen from './screens/OTPVerificationScreen';
 const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
 
-// Drawer menu toggle icon
-function screenOptionsWithMenu({ navigation }) {
-  return {
-    headerLeft: () => (
-      <TouchableOpacity onPress={() => navigation.toggleDrawer()} style={{ marginLeft: 15 }}>
-        <Ionicons name="menu" size={28} color="#000" />
-      </TouchableOpacity>
-    ),
-    headerStyle: { backgroundColor: '#fff' },
-    headerTintColor: '#000',
-    headerTitleStyle: { fontWeight: 'bold' },
-  };
-}
-
-// Stack Navigator for main app flow
-function MainStack() {
+function MainStack({ navigation }) {
   return (
-    <Stack.Navigator
-      initialRouteName="Home"
-      screenOptions={{
-        headerStyle: { backgroundColor: '#fff' },
-        headerTintColor: '#000',
-        headerTitleStyle: { fontWeight: 'bold' },
-      }}
-    >
-      {/* Home */}
+    <Stack.Navigator initialRouteName="Home">
+      
+      {/* Home Screen */}
       <Stack.Screen
         name="Home"
         component={HomeScreen}
-        options={{ title: '' }}
+        options={{
+          title: '',
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => navigation.toggleDrawer()}
+              style={{ marginLeft: 15 }}
+            >
+              <Ionicons name="menu" size={28} color="#000" />
+            </TouchableOpacity>
+          ),
+        }}
       />
 
-      {/* ------------------ POLICE ------------------ */}
-      <Stack.Screen
-        name="PoliceLogin"
-        component={PoliceLoginScreen}
-        options={{ title: '', headerBackTitleVisible: false }}
-      />
+      {/* Police Flow */}
+      <Stack.Screen name="PoliceLogin" component={PoliceLoginScreen} />
       <Stack.Screen
         name="ForgotPasswordPolice"
-        component={ForgotPasswordScreen}
-        options={{ title: 'Police - Forgot Password', headerBackTitleVisible: false }}
+        component={(props) => <ForgotPasswordScreen {...props} nextScreen="OTPVerificationPolice" />}
+        options={{ title: 'Forgot Password' }}
       />
       <Stack.Screen
         name="OTPVerificationPolice"
         component={OTPVerificationScreen}
-        options={{ title: 'Police - OTP Verification', headerBackTitleVisible: false }}
+        options={{ title: 'OTP Verification' }}
       />
 
-      {/* ------------------ NGO ------------------ */}
-      <Stack.Screen
-        name="NGOLogin"
-        component={NGOLoginScreen}
-        options={{ title: '', headerBackTitleVisible: false }}
-      />
+      {/* NGO Flow */}
+      <Stack.Screen name="NGOLogin" component={NGOLoginScreen} />
       <Stack.Screen
         name="ForgotPasswordNGO"
-        component={ForgotPasswordScreen}
-        options={{ title: 'NGO - Forgot Password', headerBackTitleVisible: false }}
+        component={(props) => <ForgotPasswordScreen {...props} nextScreen="OTPVerificationNGO" />}
+        options={{ title: 'Forgot Password' }}
       />
       <Stack.Screen
         name="OTPVerificationNGO"
         component={OTPVerificationScreen}
-        options={{ title: 'NGO - OTP Verification', headerBackTitleVisible: false }}
+        options={{ title: 'OTP Verification' }}
       />
 
-      {/* ------------------ FAMILY ------------------ */}
-      <Stack.Screen
-        name="FamilyLogin"
-        component={FamilyLoginScreen}
-        options={{ title: '', headerBackTitleVisible: false }}
-      />
+      {/* Family Flow */}
+      <Stack.Screen name="FamilyLogin" component={FamilyLoginScreen} />
       <Stack.Screen
         name="ForgotPasswordFamily"
-        component={ForgotPasswordScreen}
-        options={{ title: 'Family - Forgot Password', headerBackTitleVisible: false }}
+        component={(props) => <ForgotPasswordScreen {...props} nextScreen="OTPVerificationFamily" />}
+        options={{ title: 'Forgot Password' }}
       />
       <Stack.Screen
         name="OTPVerificationFamily"
         component={OTPVerificationScreen}
-        options={{ title: 'Family - OTP Verification', headerBackTitleVisible: false }}
+        options={{ title: 'OTP Verification' }}
       />
     </Stack.Navigator>
   );
 }
 
-// Drawer with menu items
 export default function App() {
   return (
     <NavigationContainer>
       <Drawer.Navigator
-        initialRouteName="HomeDrawer"
-        screenOptions={({ navigation }) => screenOptionsWithMenu({ navigation })}
+        initialRouteName="Home"
+        screenOptions={{
+          headerTitleAlign: 'center',
+          drawerType: 'front',
+          drawerStyle: { backgroundColor: '#fff', width: 240 },
+        }}
       >
-        <Drawer.Screen name="Home" component={MainStack} options={{ headerShown: false }} />
+        <Drawer.Screen
+          name="Home"
+          component={MainStack}
+          options={{ headerShown: false }}
+        />
         <Drawer.Screen name="About Us" component={AboutUsScreen} />
       </Drawer.Navigator>
     </NavigationContainer>

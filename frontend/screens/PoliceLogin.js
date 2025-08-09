@@ -15,7 +15,6 @@ export default function PoliceLoginScreen({ navigation }) {
     } else if (!password) {
       Alert.alert('Error', 'Please enter your password.');
     } else {
-      // Proceed with authentication
       Alert.alert('Success', 'Logged in successfully!');
     }
   };
@@ -27,7 +26,7 @@ export default function PoliceLoginScreen({ navigation }) {
       <Text style={styles.label}>Email / Police ID</Text>
       <TextInput
         style={styles.input}
-        placeholder="Enter  your email or ID"
+        placeholder="Enter your email or ID"
         placeholderTextColor="#A47171"
         value={email}
         onChangeText={setEmail}
@@ -37,7 +36,7 @@ export default function PoliceLoginScreen({ navigation }) {
       <View style={styles.passwordContainer}>
         <TextInput
           style={styles.passwordInput}
-          placeholder="Enter  your password"
+          placeholder="Enter your password"
           placeholderTextColor="#A47171"
           secureTextEntry={secureText}
           value={password}
@@ -52,8 +51,12 @@ export default function PoliceLoginScreen({ navigation }) {
         <Text style={styles.loginText}>Login</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity>
-        <Text style={styles.link}>Forgot Password?</Text>
+      {/* Forgot Password Button centered below Login */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate('ForgotPasswordPolice')}
+        style={styles.forgotButton}
+      >
+        <Text style={styles.forgotText}>Forgot Password?</Text>
       </TouchableOpacity>
 
       <TouchableOpacity>
@@ -64,13 +67,44 @@ export default function PoliceLoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF8F8', padding: 20 },
-  title: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginVertical: 20 },
-  label: { fontWeight: 'bold', marginTop: 15, marginBottom: 5 },
-  input: { backgroundColor: 'white', borderRadius: 6, padding: 12, borderWidth: 1, borderColor: '#E4C4C4' },
-  passwordContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: '#E4C4C4' },
+  container: { flex: 1, backgroundColor: '#fcf7f7', padding: 20 },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginVertical: 20,
+    color: '#850a0a'
+  },
+  label: { fontWeight: 'bold', marginTop: 15, marginBottom: 5, color: '#850a0a' },
+  input: {
+    backgroundColor: 'white',
+    borderRadius: 6,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E4C4C4'
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E4C4C4'
+  },
   passwordInput: { flex: 1, paddingVertical: 12 },
-  loginButton: { backgroundColor: '#7F0E0E', padding: 14, borderRadius: 6, marginTop: 20, alignItems: 'center' },
-  loginText: { color: 'white', fontWeight: 'bold' },
-  link: { color: '#A47171', textAlign: 'center', marginTop: 10 }
+  loginButton: {
+    backgroundColor: '#850a0a',
+    padding: 14,
+    borderRadius: 6,
+    marginTop: 20,
+    alignItems: 'center'
+  },
+  loginText: { color: '#fcf7f7', fontWeight: 'bold' },
+  forgotButton: {
+    marginTop: 10,
+    alignItems: 'center'
+  },
+  forgotText: { color: '#850a0a', fontSize: 14 },
+  link: { color: '#850a0a', textAlign: 'center', marginTop: 20, fontSize: 14 }
 });
