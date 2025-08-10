@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "mobile-app",
-    "slug": "dristhi",
+    "slug": "drishti",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -21,9 +21,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "d6fe127c-91fa-40cb-bdf0-95f60c60c84c"
+        "projectId": "bec39b73-014a-4458-834e-a10295edddf0"
       }
     },
-    "owner": "jahanasherin"
+    "owner": "frina"
   }
 }
