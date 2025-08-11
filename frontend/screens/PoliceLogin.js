@@ -16,6 +16,7 @@ export default function PoliceLoginScreen({ navigation }) {
       Alert.alert('Error', 'Please enter your password.');
     } else {
       Alert.alert('Success', 'Logged in successfully!');
+      navigation.navigate('PoliceDashboard', { officerName: email });
     }
   };
 
@@ -27,7 +28,7 @@ export default function PoliceLoginScreen({ navigation }) {
       <TextInput
         style={styles.input}
         placeholder="Enter your email or ID"
-        placeholderTextColor="#A47171"
+        placeholderTextColor="#b94e4e"
         value={email}
         onChangeText={setEmail}
       />
@@ -37,7 +38,7 @@ export default function PoliceLoginScreen({ navigation }) {
         <TextInput
           style={styles.passwordInput}
           placeholder="Enter your password"
-          placeholderTextColor="#A47171"
+          placeholderTextColor="#b94e4e"
           secureTextEntry={secureText}
           value={password}
           onChangeText={setPassword}

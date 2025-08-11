@@ -13,6 +13,9 @@ import NGOLoginScreen from './screens/NgoLoginScreen';
 import FamilyLoginScreen from './screens/FamilyLoginScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
 import OTPVerificationScreen from './screens/OTPVerificationScreen';
+import FamilySignupScreen from './screens/FamilySignupScreen';
+import PoliceDashboardScreen from './screens/PoliceDashboardScreen';
+import NgoDashboardScreen from './screens/NgoDashboardScreen';
 
 const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -50,7 +53,12 @@ function MainStack({ navigation }) {
         component={OTPVerificationScreen}
         options={{ title: 'OTP Verification' }}
       />
-
+      <Stack.Screen
+      name="PoliceDashboard"
+      component={PoliceDashboardScreen}
+      options={{ title: 'Dashboard' }}
+      />
+    
       {/* NGO Flow */}
       <Stack.Screen name="NGOLogin" component={NGOLoginScreen} />
       <Stack.Screen
@@ -63,7 +71,11 @@ function MainStack({ navigation }) {
         component={OTPVerificationScreen}
         options={{ title: 'OTP Verification' }}
       />
-
+      <Stack.Screen
+      name="NgoDashboard"
+      component={NgoDashboardScreen}
+      options={{ title: 'NGO Dashboard' }}
+      />
       {/* Family Flow */}
       <Stack.Screen name="FamilyLogin" component={FamilyLoginScreen} />
       <Stack.Screen
@@ -75,6 +87,12 @@ function MainStack({ navigation }) {
         name="OTPVerificationFamily"
         component={OTPVerificationScreen}
         options={{ title: 'OTP Verification' }}
+      />
+      
+      <Stack.Screen
+      name="FamilySignup"
+      component={FamilySignupScreen}
+      options={{ title: 'Sign Up' }}
       />
     </Stack.Navigator>
   );

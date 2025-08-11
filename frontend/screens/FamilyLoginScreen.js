@@ -29,7 +29,7 @@ export default function FamilyMemberLoginScreen({ navigation }) {
         <TextInput
           style={styles.input}
           placeholder="Mobile Number or Email Address"
-          placeholderTextColor="#a07878"
+          placeholderTextColor="#b94e4e"
           value={email}
           onChangeText={setEmail}
         />
@@ -40,7 +40,7 @@ export default function FamilyMemberLoginScreen({ navigation }) {
         <TextInput
           style={styles.passwordInput}
           placeholder="Password"
-          placeholderTextColor="#a07878"
+          placeholderTextColor="#b94e4e"
           secureTextEntry={secureText}
           value={password}
           onChangeText={setPassword}
@@ -64,8 +64,8 @@ export default function FamilyMemberLoginScreen({ navigation }) {
       </TouchableOpacity>
 
       {/* Sign Up */}
-      <TouchableOpacity>
-        <Text style={styles.signupText}>Don’t have an account? Create one</Text>
+      <TouchableOpacity onPress={() => navigation.navigate('FamilySignup')}>
+      <Text style={styles.signupText}>Don’t have an account? Create one</Text>
       </TouchableOpacity>
     </View>
   );

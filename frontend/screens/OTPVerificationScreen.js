@@ -51,7 +51,7 @@ export default function OTPVerificationScreen({ navigation }) {
       {/* Verify Button */}
       <TouchableOpacity
         style={styles.button}
-        onPress={() => navigation.navigate('ResetPassword')}
+        onPress={() => navigation.navigate('ResetPasswordScreen')}
       >
         <Text style={styles.buttonText}>Verify OTP</Text>
       </TouchableOpacity>

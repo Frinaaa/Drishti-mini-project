@@ -16,6 +16,7 @@ export default function NGOLoginScreen({ navigation }) {
       Alert.alert('Error', 'Please enter your password.');
     } else {
       Alert.alert('Success', 'Logged in successfully!');
+      navigation.navigate('NgoDashboard', { ngoName: name });
     }
   };
 
@@ -30,7 +31,7 @@ export default function NGOLoginScreen({ navigation }) {
       <TextInput
         style={styles.input}
         placeholder="Enter your email or phone"
-        placeholderTextColor="#A47171"
+        placeholderTextColor="#b94e4e"
         value={email}
         onChangeText={setEmail}
       />
@@ -41,7 +42,7 @@ export default function NGOLoginScreen({ navigation }) {
         <TextInput
           style={styles.passwordInput}
           placeholder="Enter your password"
-          placeholderTextColor="#A47171"
+          placeholderTextColor="#b94e4e"
           secureTextEntry={secureText}
           value={password}
           onChangeText={setPassword}
@@ -64,10 +65,7 @@ export default function NGOLoginScreen({ navigation }) {
         <Text style={styles.forgotText}>Forgot Password?</Text>
       </TouchableOpacity>
 
-      {/* Sign Up */}
-      <TouchableOpacity>
-        <Text style={styles.signupText}>New to Drishti? Sign up here</Text>
-      </TouchableOpacity>
+      
     </View>
   );
 }

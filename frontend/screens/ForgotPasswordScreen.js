@@ -1,9 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useLayoutEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function ForgotPasswordScreen({ navigation }) {
   const [email, setEmail] = useState('');
+
+  // Hide the default header so only our custom back arrow shows
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: false,
+    });
+  }, [navigation]);
 
   return (
     <View style={styles.container}>
@@ -26,20 +33,20 @@ export default function ForgotPasswordScreen({ navigation }) {
       <Text style={styles.label}>Email</Text>
       <TextInput
         style={styles.input}
-        placeholder="Enter  your email"
+        placeholder="Enter your email"
         placeholderTextColor="#b94e4e"
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
       />
 
+      {/* Send OTP button */}
       <TouchableOpacity
-  style={styles.button}
-  onPress={() => navigation.navigate('OTPVerification')} // Sends to OTP screen
->
-  <Text style={styles.buttonText}>Send OTP</Text>
-</TouchableOpacity>
-
+        style={styles.button}
+        onPress={() => navigation.navigate('OTPVerificationScreen')} // Sends to OTP screen
+      >
+        <Text style={styles.buttonText}>Send OTP</Text>
+      </TouchableOpacity>
     </View>
   );
 }
