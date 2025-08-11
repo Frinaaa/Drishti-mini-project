@@ -1,6 +1,10 @@
-import React, { useState } from "react";
+import React from 'react';
+import { TouchableOpacity } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createDrawerNavigator } from '@react-navigation/drawer';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 
-<<<<<<< HEAD
 // Screens
 import HomeScreen from './screens/HomeScreen';
 import AboutUsScreen from './screens/AboutUsScreen';
@@ -9,165 +13,132 @@ import NGOLoginScreen from './screens/NgoLoginScreen';
 import FamilyLoginScreen from './screens/FamilyLoginScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
 import OTPVerificationScreen from './screens/OTPVerificationScreen';
-import FamilySignupScreen from './screens/FamilySignupScreen';
-import PoliceDashboardScreen from './screens/PoliceDashboardScreen';
-import NgoDashboardScreen from './screens/NgoDashboardScreen';
-=======
-function SendOtpScreen({ onOtpSent }) {
-  const handleSendOtp = () => {
-    // Simulate API call to send OTP
-    console.log("OTP sent to user!");
-    onOtpSent(); // Navigate to OTP page
-  };
->>>>>>> 5ad173e60f6c6b0a71c059c64caeba0b17c44c65
 
+const Drawer = createDrawerNavigator();
+const Stack = createNativeStackNavigator();
+
+// Function to add hamburger to all stack screens
+const withHamburger = (navigation) => ({
+  headerLeft: () => (
+    <TouchableOpacity
+      onPress={() => navigation.toggleDrawer()}
+      style={{ marginRight: 10 }}
+    >
+      <Ionicons name="menu" size={28} color="#333" />
+    </TouchableOpacity>
+  )
+});
+
+function MainStack({ navigation }) {
   return (
-    <div style={{ textAlign: "center", marginTop: "50px" }}>
-      <h2>Forgot Password</h2>
-      <p>Enter your registered email or phone number</p>
-      <input type="text" placeholder="Email / Phone" />
-      <br />
-      <button
-        onClick={handleSendOtp}
-        style={{
-          backgroundColor: "#880806",
-          color: "white",
-          padding: "10px 20px",
-          marginTop: "20px",
-          border: "none",
-          cursor: "pointer"
+    <Stack.Navigator
+      screenOptions={{
+        headerTitleAlign: 'center',
+      }}
+    >
+      <Stack.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{
+          title: 'Welcome to Drishti',
+          ...withHamburger(navigation),
         }}
-      >
-        Send OTP
-      </button>
-    </div>
-  );
-}
-
-<<<<<<< HEAD
-      {/* Police Flow */}
-      <Stack.Screen name="PoliceLogin" component={PoliceLoginScreen} />
+      />
+      <Stack.Screen
+        name="PoliceLogin"
+        component={PoliceLoginScreen}
+        options={{
+          title: 'Police Login',
+          ...withHamburger(navigation),
+        }}
+      />
+      <Stack.Screen
+        name="NGOLogin"
+        component={NGOLoginScreen}
+        options={{
+          title: 'NGO Login',
+          ...withHamburger(navigation),
+        }}
+      />
+      <Stack.Screen
+        name="FamilyLogin"
+        component={FamilyLoginScreen}
+        options={{
+          title: 'Family Login',
+          ...withHamburger(navigation),
+        }}
+      />
       <Stack.Screen
         name="ForgotPasswordPolice"
-        component={(props) => <ForgotPasswordScreen {...props} nextScreen="OTPVerificationPolice" />}
-        options={{ title: 'Forgot Password' }}
+        component={ForgotPasswordScreen}
+        options={{
+          title: 'Forgot Password (Police)',
+          ...withHamburger(navigation),
+        }}
       />
       <Stack.Screen
         name="OTPVerificationPolice"
         component={OTPVerificationScreen}
-        options={{ title: 'OTP Verification' }}
+        options={{
+          title: 'Verify OTP (Police)',
+          ...withHamburger(navigation),
+        }}
       />
-      <Stack.Screen
-      name="PoliceDashboard"
-      component={PoliceDashboardScreen}
-      options={{ title: 'Dashboard' }}
-      />
-    
-      {/* NGO Flow */}
-      <Stack.Screen name="NGOLogin" component={NGOLoginScreen} />
       <Stack.Screen
         name="ForgotPasswordNGO"
-        component={(props) => <ForgotPasswordScreen {...props} nextScreen="OTPVerificationNGO" />}
-        options={{ title: 'Forgot Password' }}
+        component={ForgotPasswordScreen}
+        options={{
+          title: 'Forgot Password (NGO)',
+          ...withHamburger(navigation),
+        }}
       />
       <Stack.Screen
         name="OTPVerificationNGO"
         component={OTPVerificationScreen}
-        options={{ title: 'OTP Verification' }}
+        options={{
+          title: 'Verify OTP (NGO)',
+          ...withHamburger(navigation),
+        }}
       />
-      <Stack.Screen
-      name="NgoDashboard"
-      component={NgoDashboardScreen}
-      options={{ title: 'NGO Dashboard' }}
-      />
-      {/* Family Flow */}
-      <Stack.Screen name="FamilyLogin" component={FamilyLoginScreen} />
       <Stack.Screen
         name="ForgotPasswordFamily"
-        component={(props) => <ForgotPasswordScreen {...props} nextScreen="OTPVerificationFamily" />}
-        options={{ title: 'Forgot Password' }}
+        component={ForgotPasswordScreen}
+        options={{
+          title: 'Forgot Password (Family)',
+          ...withHamburger(navigation),
+        }}
       />
       <Stack.Screen
         name="OTPVerificationFamily"
         component={OTPVerificationScreen}
-        options={{ title: 'OTP Verification' }}
-      />
-      
-      <Stack.Screen
-      name="FamilySignup"
-      component={FamilySignupScreen}
-      options={{ title: 'Sign Up' }}
+        options={{
+          title: 'Verify OTP (Family)',
+          ...withHamburger(navigation),
+        }}
       />
     </Stack.Navigator>
-=======
-function OtpScreen() {
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-
-  const handleChange = (value, index) => {
-    if (value.length <= 1) {
-      const newOtp = [...otp];
-      newOtp[index] = value;
-      setOtp(newOtp);
-    }
-  };
-
-  const handleVerify = () => {
-    console.log("Entered OTP:", otp.join(""));
-    alert("OTP Verified!");
-  };
-
-  return (
-    <div style={{ textAlign: "center", marginTop: "50px" }}>
-      <h2>Reset Password</h2>
-      <p>We have sent an OTP to your registered mobile number.</p>
-      <div style={{ display: "flex", justifyContent: "center", gap: "10px" }}>
-        {otp.map((digit, i) => (
-          <input
-            key={i}
-            type="text"
-            maxLength="1"
-            value={digit}
-            onChange={(e) => handleChange(e.target.value, i)}
-            style={{
-              width: "40px",
-              height: "40px",
-              fontSize: "20px",
-              textAlign: "center",
-              border: "1px solid #880806",
-              borderRadius: "5px"
-            }}
-          />
-        ))}
-      </div>
-      <br />
-      <button
-        onClick={handleVerify}
-        style={{
-          backgroundColor: "#880806",
-          color: "white",
-          padding: "10px 20px",
-          marginTop: "20px",
-          border: "none",
-          cursor: "pointer"
-        }}
-      >
-        Verify OTP
-      </button>
-    </div>
->>>>>>> 5ad173e60f6c6b0a71c059c64caeba0b17c44c65
   );
 }
 
 export default function App() {
-  const [showOtpScreen, setShowOtpScreen] = useState(false);
-
   return (
-    <div>
-      {showOtpScreen ? (
-        <OtpScreen />
-      ) : (
-        <SendOtpScreen onOtpSent={() => setShowOtpScreen(true)} />
-      )}
-    </div>
+    <NavigationContainer>
+      <Drawer.Navigator
+        screenOptions={{
+          headerShown: false,
+        }}
+      >
+        <Drawer.Screen name="Home" component={MainStack} />
+        <Drawer.Screen
+          name="About Us"
+          component={AboutUsScreen}
+          options={({ navigation }) => ({
+            headerShown: true,
+            title: 'About Us',
+            ...withHamburger(navigation),
+          })}
+        />
+      </Drawer.Navigator>
+    </NavigationContainer>
   );
 }

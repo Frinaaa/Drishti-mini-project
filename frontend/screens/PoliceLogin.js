@@ -6,15 +6,9 @@ export default function PoliceLoginScreen({ navigation }) {
   const [password, setPassword] = useState('');
 
   const handleLogin = () => {
-    if (!email && !password) {
-      Alert.alert('Error', 'Please enter your email/ID and password.');
-    } else if (!email) {
-      Alert.alert('Error', 'Please enter your email or Police ID.');
-    } else if (!password) {
-      Alert.alert('Error', 'Please enter your password.');
-    } else {
-      Alert.alert('Success', 'Logged in successfully!');
-      navigation.navigate('PoliceDashboard', { officerName: email });
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill all fields');
+      return;
     }
     // TODO: Add actual login API call
     Alert.alert('Success', 'Police Login Successful');
@@ -35,34 +29,13 @@ export default function PoliceLoginScreen({ navigation }) {
 
       <TextInput
         style={styles.input}
-<<<<<<< HEAD
-        placeholder="Enter your email or ID"
-        placeholderTextColor="#b94e4e"
-=======
         placeholder="Enter Email"
->>>>>>> 5ad173e60f6c6b0a71c059c64caeba0b17c44c65
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
         autoCapitalize="none"
       />
 
-<<<<<<< HEAD
-      <Text style={styles.label}>Password</Text>
-      <View style={styles.passwordContainer}>
-        <TextInput
-          style={styles.passwordInput}
-          placeholder="Enter your password"
-          placeholderTextColor="#b94e4e"
-          secureTextEntry={secureText}
-          value={password}
-          onChangeText={setPassword}
-        />
-        <TouchableOpacity onPress={() => setSecureText(!secureText)}>
-          <Ionicons name={secureText ? 'eye-off' : 'eye'} size={22} color="#A47171" />
-        </TouchableOpacity>
-      </View>
-=======
       <TextInput
         style={styles.input}
         placeholder="Enter Password"
@@ -70,7 +43,6 @@ export default function PoliceLoginScreen({ navigation }) {
         onChangeText={setPassword}
         secureTextEntry
       />
->>>>>>> 5ad173e60f6c6b0a71c059c64caeba0b17c44c65
 
       <TouchableOpacity style={styles.button} onPress={handleLogin}>
         <Text style={styles.buttonText}>Login</Text>
