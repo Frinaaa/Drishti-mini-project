@@ -1,10 +1,6 @@
-import React from 'react';
-import { TouchableOpacity } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createDrawerNavigator } from '@react-navigation/drawer';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from "react";
 
+<<<<<<< HEAD
 // Screens
 import HomeScreen from './screens/HomeScreen';
 import AboutUsScreen from './screens/AboutUsScreen';
@@ -16,31 +12,39 @@ import OTPVerificationScreen from './screens/OTPVerificationScreen';
 import FamilySignupScreen from './screens/FamilySignupScreen';
 import PoliceDashboardScreen from './screens/PoliceDashboardScreen';
 import NgoDashboardScreen from './screens/NgoDashboardScreen';
+=======
+function SendOtpScreen({ onOtpSent }) {
+  const handleSendOtp = () => {
+    // Simulate API call to send OTP
+    console.log("OTP sent to user!");
+    onOtpSent(); // Navigate to OTP page
+  };
+>>>>>>> 5ad173e60f6c6b0a71c059c64caeba0b17c44c65
 
-const Stack = createNativeStackNavigator();
-const Drawer = createDrawerNavigator();
-
-function MainStack({ navigation }) {
   return (
-    <Stack.Navigator initialRouteName="Home">
-      
-      {/* Home Screen */}
-      <Stack.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{
-          title: '',
-          headerLeft: () => (
-            <TouchableOpacity
-              onPress={() => navigation.toggleDrawer()}
-              style={{ marginLeft: 15 }}
-            >
-              <Ionicons name="menu" size={28} color="#000" />
-            </TouchableOpacity>
-          ),
+    <div style={{ textAlign: "center", marginTop: "50px" }}>
+      <h2>Forgot Password</h2>
+      <p>Enter your registered email or phone number</p>
+      <input type="text" placeholder="Email / Phone" />
+      <br />
+      <button
+        onClick={handleSendOtp}
+        style={{
+          backgroundColor: "#880806",
+          color: "white",
+          padding: "10px 20px",
+          marginTop: "20px",
+          border: "none",
+          cursor: "pointer"
         }}
-      />
+      >
+        Send OTP
+      </button>
+    </div>
+  );
+}
 
+<<<<<<< HEAD
       {/* Police Flow */}
       <Stack.Screen name="PoliceLogin" component={PoliceLoginScreen} />
       <Stack.Screen
@@ -95,27 +99,75 @@ function MainStack({ navigation }) {
       options={{ title: 'Sign Up' }}
       />
     </Stack.Navigator>
+=======
+function OtpScreen() {
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+
+  const handleChange = (value, index) => {
+    if (value.length <= 1) {
+      const newOtp = [...otp];
+      newOtp[index] = value;
+      setOtp(newOtp);
+    }
+  };
+
+  const handleVerify = () => {
+    console.log("Entered OTP:", otp.join(""));
+    alert("OTP Verified!");
+  };
+
+  return (
+    <div style={{ textAlign: "center", marginTop: "50px" }}>
+      <h2>Reset Password</h2>
+      <p>We have sent an OTP to your registered mobile number.</p>
+      <div style={{ display: "flex", justifyContent: "center", gap: "10px" }}>
+        {otp.map((digit, i) => (
+          <input
+            key={i}
+            type="text"
+            maxLength="1"
+            value={digit}
+            onChange={(e) => handleChange(e.target.value, i)}
+            style={{
+              width: "40px",
+              height: "40px",
+              fontSize: "20px",
+              textAlign: "center",
+              border: "1px solid #880806",
+              borderRadius: "5px"
+            }}
+          />
+        ))}
+      </div>
+      <br />
+      <button
+        onClick={handleVerify}
+        style={{
+          backgroundColor: "#880806",
+          color: "white",
+          padding: "10px 20px",
+          marginTop: "20px",
+          border: "none",
+          cursor: "pointer"
+        }}
+      >
+        Verify OTP
+      </button>
+    </div>
+>>>>>>> 5ad173e60f6c6b0a71c059c64caeba0b17c44c65
   );
 }
 
 export default function App() {
+  const [showOtpScreen, setShowOtpScreen] = useState(false);
+
   return (
-    <NavigationContainer>
-      <Drawer.Navigator
-        initialRouteName="Home"
-        screenOptions={{
-          headerTitleAlign: 'center',
-          drawerType: 'front',
-          drawerStyle: { backgroundColor: '#fff', width: 240 },
-        }}
-      >
-        <Drawer.Screen
-          name="Home"
-          component={MainStack}
-          options={{ headerShown: false }}
-        />
-        <Drawer.Screen name="About Us" component={AboutUsScreen} />
-      </Drawer.Navigator>
-    </NavigationContainer>
+    <div>
+      {showOtpScreen ? (
+        <OtpScreen />
+      ) : (
+        <SendOtpScreen onOtpSent={() => setShowOtpScreen(true)} />
+      )}
+    </div>
   );
 }
