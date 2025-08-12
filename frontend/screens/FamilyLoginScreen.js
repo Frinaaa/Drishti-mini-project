@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -89,3 +90,5 @@ const styles = StyleSheet.create({
   loginText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   signupText: { color: '#7F0E0E', textAlign: 'center', marginTop: 15, fontSize: 14 }
 });
+=======
+>>>>>>> parent of ba6a5d1 (as)

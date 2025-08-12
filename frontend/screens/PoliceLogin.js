@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
+<<<<<<< HEAD
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+=======
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+>>>>>>> parent of ba6a5d1 (as)
 
-export default function PoliceLoginScreen({ navigation }) {
-  const [email, setEmail] = useState('');
+export default function PoliceLoginScreen() {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
   const handleLogin = () => {
+<<<<<<< HEAD
 <<<<<<< HEAD
     if (!email || !password) {
       Alert.alert('Error', 'Please fill all fields');
@@ -24,6 +29,10 @@ export default function PoliceLoginScreen({ navigation }) {
     }
     // TODO: Add actual login API call
     Alert.alert('Success', 'Police Login Successful');
+=======
+    // You can later connect to API here
+    console.log('Police Login:', username, password);
+>>>>>>> parent of ba6a5d1 (as)
   };
 
   const handleForgotPassword = () => {
@@ -41,6 +50,7 @@ export default function PoliceLoginScreen({ navigation }) {
 
       <TextInput
         style={styles.input}
+<<<<<<< HEAD
 <<<<<<< HEAD
         placeholder="Enter Email"
 =======
@@ -89,12 +99,30 @@ export default function PoliceLoginScreen({ navigation }) {
       <TouchableOpacity>
         <Text style={styles.link}>Forgot Password?</Text>
 >>>>>>> parent of 75e7d00 (aa)
+=======
+        placeholder="Username"
+        value={username}
+        onChangeText={setUsername}
+      />
+
+      <TextInput
+        style={styles.input}
+        placeholder="Password"
+        secureTextEntry
+        value={password}
+        onChangeText={setPassword}
+      />
+
+      <TouchableOpacity style={styles.button} onPress={handleLogin}>
+        <Text style={styles.buttonText}>Log In</Text>
+>>>>>>> parent of ba6a5d1 (as)
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+<<<<<<< HEAD
 <<<<<<< HEAD
   container: { flex: 1, justifyContent: 'center', padding: 20, backgroundColor: '#fff' },
   title: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#880806' },
@@ -113,5 +141,37 @@ const styles = StyleSheet.create({
   loginButton: { backgroundColor: '#7F0E0E', padding: 14, borderRadius: 6, marginTop: 20, alignItems: 'center' },
   loginText: { color: 'white', fontWeight: 'bold' },
   link: { color: '#A47171', textAlign: 'center', marginTop: 10 }
+=======
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: '#FCF7F7',
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 30,
+    color: '#3A0000',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#880806',
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 15,
+  },
+  button: {
+    backgroundColor: '#880806',
+    padding: 12,
+    borderRadius: 5,
+  },
+  buttonText: {
+    color: '#fff',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+>>>>>>> parent of ba6a5d1 (as)
 });
 >>>>>>> parent of 75e7d00 (aa)

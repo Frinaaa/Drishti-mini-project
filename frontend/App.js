@@ -1,26 +1,22 @@
 import React from 'react';
 <<<<<<< HEAD
+<<<<<<< HEAD
 import { StyleSheet, Text, View } from 'react-native';
 =======
 import { TouchableOpacity } from 'react-native';
+=======
+>>>>>>> parent of ba6a5d1 (as)
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createDrawerNavigator } from '@react-navigation/drawer';
-import { Ionicons } from '@expo/vector-icons';
 
-// Screens
 import HomeScreen from './screens/HomeScreen';
-import AboutUsScreen from './screens/AboutUsScreen';
-
-import PoliceLoginScreen from './screens/PoliceLogin';
-import NGOLoginScreen from './screens/NgoLoginScreen';
+import PoliceLoginScreen from './screens/PoliceLoginScreen';
+import NGOLoginScreen from './screens/NGOLoginScreen';
 import FamilyLoginScreen from './screens/FamilyLoginScreen';
-import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
-import OTPVerificationScreen from './screens/OTPVerificationScreen';
 
 const Stack = createNativeStackNavigator();
-const Drawer = createDrawerNavigator();
 
+<<<<<<< HEAD
 // Drawer menu toggle icon
 function screenOptionsWithMenu({ navigation }) {
   return {
@@ -109,6 +105,8 @@ function MainStack() {
 >>>>>>> parent of 75e7d00 (aa)
 
 // Drawer with menu items
+=======
+>>>>>>> parent of ba6a5d1 (as)
 export default function App() {
   return (
 <<<<<<< HEAD
@@ -117,13 +115,12 @@ export default function App() {
     </View>
 =======
     <NavigationContainer>
-      <Drawer.Navigator
-        initialRouteName="HomeDrawer"
-        screenOptions={({ navigation }) => screenOptionsWithMenu({ navigation })}
-      >
-        <Drawer.Screen name="Home" component={MainStack} options={{ headerShown: false }} />
-        <Drawer.Screen name="About Us" component={AboutUsScreen} />
-      </Drawer.Navigator>
+      <Stack.Navigator initialRouteName="Home" screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="PoliceLogin" component={PoliceLoginScreen} />
+        <Stack.Screen name="NGOLogin" component={NGOLoginScreen} />
+        <Stack.Screen name="FamilyLogin" component={FamilyLoginScreen} />
+      </Stack.Navigator>
     </NavigationContainer>
 >>>>>>> parent of 75e7d00 (aa)
   );

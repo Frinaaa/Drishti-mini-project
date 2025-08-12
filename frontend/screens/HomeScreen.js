@@ -9,28 +9,40 @@ const roles = [
     title: 'Police Officer',
     desc: 'Access and manage missing person cases.',
 <<<<<<< HEAD
+<<<<<<< HEAD
     image: require('../assets/police.png'),
 =======
     image: require('./assets/police.png'), // ✅ forward slash
 >>>>>>> parent of 75e7d00 (aa)
+=======
+    image: require('../assets/police.png'),
+>>>>>>> parent of ba6a5d1 (as)
   },
   {
     title: 'NGO Volunteer',
     desc: 'Assist in search and support efforts.',
 <<<<<<< HEAD
+<<<<<<< HEAD
     image: require('../assets/ngo.png'),
 =======
     image: require('./assets/ngo.png'), // ✅ forward slash
 >>>>>>> parent of 75e7d00 (aa)
+=======
+    image: require('../assets/ngo.png'),
+>>>>>>> parent of ba6a5d1 (as)
   },
   {
     title: 'Family Member',
     desc: 'Report and track missing loved ones.',
 <<<<<<< HEAD
+<<<<<<< HEAD
     image: require('../assets/family.png'),
 =======
     image: require('./assets/family.png'), // ✅ forward slash
 >>>>>>> parent of 75e7d00 (aa)
+=======
+    image: require('../assets/family.png'),
+>>>>>>> parent of ba6a5d1 (as)
   },
 ];
 
@@ -58,6 +70,7 @@ export default function HomeScreen({ navigation }) {
             <View style={styles.textBox}>
               <Text style={styles.role}>{role.title}</Text>
               <Text style={styles.desc}>{role.desc}</Text>
+<<<<<<< HEAD
               <TouchableOpacity
                 style={styles.button}
                 onPress={() => {
@@ -68,6 +81,17 @@ export default function HomeScreen({ navigation }) {
               >
                 <Text style={styles.buttonText}>Log In / Sign Up</Text>
               </TouchableOpacity>
+=======
+
+              {role.title === 'Police Officer' && (
+                <TouchableOpacity
+                  style={styles.button}
+                  onPress={() => navigation.navigate('PoliceLogin')}
+                >
+                  <Text style={styles.buttonText}>Log In</Text>
+                </TouchableOpacity>
+              )}
+>>>>>>> parent of ba6a5d1 (as)
             </View>
             <Image source={role.image} style={styles.image} resizeMode="cover" />
           </View>
