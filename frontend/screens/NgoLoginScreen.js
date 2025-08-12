@@ -7,6 +7,7 @@ export default function NGOLoginScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [secureText, setSecureText] = useState(true);
 
+//...
   const handleLogin = () => {
     if (!email && !password) {
       Alert.alert('Error', 'Please enter your email/phone and password.');
@@ -16,9 +17,11 @@ export default function NGOLoginScreen({ navigation }) {
       Alert.alert('Error', 'Please enter your password.');
     } else {
       Alert.alert('Success', 'Logged in successfully!');
-      navigation.navigate('NgoDashboard', { ngoName: name });
+      // Corrected line: You can pass the email or fetch the name from an API
+      navigation.navigate('NgoDashboard', { ngoName: email }); 
     }
   };
+//...
 
   return (
     <View style={styles.container}>

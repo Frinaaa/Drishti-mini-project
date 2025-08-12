@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 
 export default function ResetPasswordScreen() {
   const [email, setEmail] = useState('');
@@ -7,7 +8,7 @@ export default function ResetPasswordScreen() {
 
   const handleResetPassword = async () => {
     if (!email || !otp || !newPassword) {
-      alert("Please fill all fields");
+      Alert.alert("Error", "Please fill all fields");
       return;
     }
 
@@ -21,39 +22,50 @@ export default function ResetPasswordScreen() {
       });
 
       const data = await res.json();
-      alert(data.message);
+      Alert.alert("Response", data.message);
 
     } catch (error) {
       console.error(error);
-      alert("Error resetting password");
+      Alert.alert("Error", "Error resetting password");
     }
   };
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Reset Password</h2>
-      <input
-        type="email"
+    <View style={styles.container}>
+      <Text style={styles.title}>Reset Password</Text>
+      <TextInput
+        style={styles.input}
         placeholder="Enter your Email"
         value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        style={{ display: 'block', marginBottom: 10 }}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
       />
-      <input
-        type="text"
+      <TextInput
+        style={styles.input}
         placeholder="Enter OTP"
         value={otp}
-        onChange={(e) => setOtp(e.target.value)}
-        style={{ display: 'block', marginBottom: 10 }}
+        onChangeText={setOtp}
+        keyboardType="numeric"
       />
-      <input
-        type="password"
+      <TextInput
+        style={styles.input}
         placeholder="Enter New Password"
         value={newPassword}
-        onChange={(e) => setNewPassword(e.target.value)}
-        style={{ display: 'block', marginBottom: 10 }}
+        onChangeText={setNewPassword}
+        secureTextEntry
       />
-      <button onClick={handleResetPassword}>Reset Password</button>
-    </div>
+      <TouchableOpacity style={styles.button} onPress={handleResetPassword}>
+        <Text style={styles.buttonText}>Reset Password</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+    container: { flex: 1, justifyContent: 'center', padding: 20, backgroundColor: '#fcf7f7' },
+    title: { fontSize: 22, fontWeight: 'bold', color: '#850a0a', marginBottom: 24, textAlign: 'center' },
+    input: { backgroundColor: 'white', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#E4C4C4', marginBottom: 14, color: '#000' },
+    button: { backgroundColor: '#850a0a', padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 10 },
+    buttonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+});
