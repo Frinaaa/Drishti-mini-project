@@ -28,8 +28,13 @@ export default function FamilyMemberLoginScreen({ navigation }) {
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
+<<<<<<< HEAD
           placeholder="Mobile Number or Email Address"
           placeholderTextColor="#b94e4e"
+=======
+          placeholder="Mobile  Number or Email Address"
+          placeholderTextColor="#8B5E5E"
+>>>>>>> parent of 75e7d00 (aa)
           value={email}
           onChangeText={setEmail}
         />
@@ -40,27 +45,28 @@ export default function FamilyMemberLoginScreen({ navigation }) {
         <TextInput
           style={styles.passwordInput}
           placeholder="Password"
+<<<<<<< HEAD
           placeholderTextColor="#b94e4e"
+=======
+          placeholderTextColor="#8B5E5E"
+>>>>>>> parent of 75e7d00 (aa)
           secureTextEntry={secureText}
           value={password}
           onChangeText={setPassword}
         />
         <TouchableOpacity onPress={() => setSecureText(!secureText)}>
-          <Ionicons name={secureText ? 'eye-off' : 'eye'} size={20} color="#a07878" />
+          <Ionicons name={secureText ? 'eye-off' : 'eye'} size={20} color="#8B5E5E" />
         </TouchableOpacity>
       </View>
+
+      {/* Forgot Password (Left aligned) */}
+      <TouchableOpacity onPress={() => navigation.navigate('ForgotPasswordScreen')}>
+        <Text style={styles.forgotPassword}>Forgot Password?</Text>
+      </TouchableOpacity>
 
       {/* Login Button */}
       <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
         <Text style={styles.loginText}>Login</Text>
-      </TouchableOpacity>
-
-      {/* Forgot Password (Centered Below Login) */}
-      <TouchableOpacity
-        onPress={() => navigation.navigate('ForgotPasswordFamily')}
-        style={styles.forgotButton}
-      >
-        <Text style={styles.forgotText}>Forgot Password?</Text>
       </TouchableOpacity>
 
       {/* Sign Up */}
@@ -72,40 +78,14 @@ export default function FamilyMemberLoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fcf7f7', padding: 20 },
-  title: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginVertical: 25, color: '#850a0a' },
-
-  inputContainer: {
-    backgroundColor: 'white',
-    borderWidth: 1,
-    borderColor: '#e4c4c4',
-    borderRadius: 8,
-    marginBottom: 15
-  },
-  input: { padding: 12, fontSize: 14, color: '#850a0a' },
-
-  passwordContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    borderWidth: 1,
-    borderColor: '#e4c4c4',
-    borderRadius: 8,
-    paddingHorizontal: 10
-  },
-  passwordInput: { flex: 1, paddingVertical: 12, fontSize: 14, color: '#850a0a' },
-
-  loginButton: {
-    backgroundColor: '#850a0a',
-    padding: 14,
-    borderRadius: 6,
-    alignItems: 'center',
-    marginTop: 20
-  },
+  container: { flex: 1, backgroundColor: '#FFF8F8', padding: 20 },
+  title: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginVertical: 25, color: '#2B0000' },
+  inputContainer: { backgroundColor: 'white', borderWidth: 1, borderColor: '#E4C4C4', borderRadius: 8, marginBottom: 15 },
+  input: { padding: 12, fontSize: 14, color: '#2B0000' },
+  passwordContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderWidth: 1, borderColor: '#E4C4C4', borderRadius: 8, paddingHorizontal: 10 },
+  passwordInput: { flex: 1, paddingVertical: 12, fontSize: 14, color: '#2B0000' },
+  forgotPassword: { color: '#7F0E0E', textAlign: 'left', marginTop: 5, marginBottom: 20, fontSize: 14 },
+  loginButton: { backgroundColor: '#7F0E0E', padding: 14, borderRadius: 6, alignItems: 'center' },
   loginText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
-
-  forgotButton: { marginTop: 12, alignItems: 'center' },
-  forgotText: { color: '#850a0a', fontSize: 14 },
-
-  signupText: { color: '#850a0a', textAlign: 'center', marginTop: 20, fontSize: 14 }
+  signupText: { color: '#7F0E0E', textAlign: 'center', marginTop: 15, fontSize: 14 }
 });

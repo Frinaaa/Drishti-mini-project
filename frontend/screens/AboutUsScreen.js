@@ -35,7 +35,7 @@ export default function AboutUsScreen() {
           {[
             { name: 'Ajaya Kumar', role: 'Project Guide', image: images.ajaya },
             { name: 'Frina P V', role: 'Developer', image: images.frina },
-            { name: 'Jahana Sherin I K', role: 'Developer', image: images.jahana },
+            { name: 'Jahana Sherin K', role: 'Developer', image: images.jahana },
           ].map((official, i) => (
             <View key={i} style={styles.officialCard}>
               <Image source={official.image} style={styles.officialImage} />

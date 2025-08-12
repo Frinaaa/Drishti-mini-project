@@ -8,17 +8,29 @@ const roles = [
   {
     title: 'Police Officer',
     desc: 'Access and manage missing person cases.',
+<<<<<<< HEAD
     image: require('../assets/police.png'),
+=======
+    image: require('./assets/police.png'), // ✅ forward slash
+>>>>>>> parent of 75e7d00 (aa)
   },
   {
     title: 'NGO Volunteer',
     desc: 'Assist in search and support efforts.',
+<<<<<<< HEAD
     image: require('../assets/ngo.png'),
+=======
+    image: require('./assets/ngo.png'), // ✅ forward slash
+>>>>>>> parent of 75e7d00 (aa)
   },
   {
     title: 'Family Member',
     desc: 'Report and track missing loved ones.',
+<<<<<<< HEAD
     image: require('../assets/family.png'),
+=======
+    image: require('./assets/family.png'), // ✅ forward slash
+>>>>>>> parent of 75e7d00 (aa)
   },
 ];
 

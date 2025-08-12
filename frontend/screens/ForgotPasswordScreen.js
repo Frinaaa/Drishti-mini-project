@@ -1,50 +1,59 @@
+<<<<<<< HEAD
 import React, { useState, useLayoutEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+=======
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+>>>>>>> parent of 75e7d00 (aa)
 
 export default function ForgotPasswordScreen({ navigation }) {
   const [email, setEmail] = useState('');
 
+<<<<<<< HEAD
   // Hide the default header so only our custom back arrow shows
   useLayoutEffect(() => {
     navigation.setOptions({
       headerShown: false,
     });
   }, [navigation]);
+=======
+  const handleNext = () => {
+    if (!email) {
+      Alert.alert('Missing Email', 'Please enter your email.');
+    } else {
+      // You can trigger OTP send here
+      navigation.navigate('OTPVerificationPolice', { email }); // Change route name as needed
+    }
+  };
+>>>>>>> parent of 75e7d00 (aa)
 
   return (
     <View style={styles.container}>
-      {/* Header with back arrow */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Forgot Password</Text>
-        <View style={{ width: 24 }} /> {/* Spacer for alignment */}
-      </View>
+      <Text style={styles.title}>Forgot Password</Text>
 
-      {/* Page title */}
-      <Text style={styles.pageTitle}>Enter your email</Text>
-      <Text style={styles.description}>
-        Please enter the email address associated with your account. We will send you a link to reset your password.
-      </Text>
-
-      {/* Email label */}
-      <Text style={styles.label}>Email</Text>
+      <Text style={styles.label}>Enter your registered Email</Text>
       <TextInput
         style={styles.input}
         placeholder="Enter your email"
+<<<<<<< HEAD
         placeholderTextColor="#b94e4e"
+=======
+        placeholderTextColor="#880806"
+>>>>>>> parent of 75e7d00 (aa)
         value={email}
         onChangeText={setEmail}
-        keyboardType="email-address"
       />
 
+<<<<<<< HEAD
       {/* Send OTP button */}
       <TouchableOpacity
         style={styles.button}
         onPress={() => navigation.navigate('OTPVerificationScreen')} // Sends to OTP screen
       >
+=======
+      <TouchableOpacity style={styles.button} onPress={handleNext}>
+>>>>>>> parent of 75e7d00 (aa)
         <Text style={styles.buttonText}>Send OTP</Text>
       </TouchableOpacity>
     </View>
@@ -52,55 +61,10 @@ export default function ForgotPasswordScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fcf7f7',
-    padding: 20,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#000',
-  },
-  pageTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
-    marginTop: 20,
-  },
-  description: {
-    fontSize: 14,
-    color: '#333',
-    marginTop: 8,
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#000',
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: '#f7eaea',
-    borderRadius: 6,
-    padding: 12,
-    marginBottom: 20,
-    color: '#000',
-  },
-  button: {
-    backgroundColor: '#850a0a',
-    padding: 15,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
+  container: { flex: 1, backgroundColor: '#FCF7F7', padding: 20, justifyContent: 'center' },
+  title: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 30 },
+  label: { fontSize: 14, fontWeight: 'bold', marginBottom: 8, color: '#000' },
+  input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10 },
+  button: { backgroundColor: '#880806', paddingVertical: 12, borderRadius: 8, marginTop: 20, alignItems: 'center' },
+  buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 });

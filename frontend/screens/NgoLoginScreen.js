@@ -33,8 +33,13 @@ export default function NGOLoginScreen({ navigation }) {
       <Text style={styles.label}>Email ID or Phone Number</Text>
       <TextInput
         style={styles.input}
+<<<<<<< HEAD
         placeholder="Enter your email or phone"
         placeholderTextColor="#b94e4e"
+=======
+        placeholder="Enter  your email or phone"
+        placeholderTextColor="#A47171"
+>>>>>>> parent of 75e7d00 (aa)
         value={email}
         onChangeText={setEmail}
       />
@@ -44,8 +49,13 @@ export default function NGOLoginScreen({ navigation }) {
       <View style={styles.passwordContainer}>
         <TextInput
           style={styles.passwordInput}
+<<<<<<< HEAD
           placeholder="Enter your password"
           placeholderTextColor="#b94e4e"
+=======
+          placeholder="Enter  your password"
+          placeholderTextColor="#A47171"
+>>>>>>> parent of 75e7d00 (aa)
           secureTextEntry={secureText}
           value={password}
           onChangeText={setPassword}
@@ -55,11 +65,17 @@ export default function NGOLoginScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* Forgot Password */}
+      <TouchableOpacity>
+        <Text style={styles.forgotText}>Forgot Password?</Text>
+      </TouchableOpacity>
+
       {/* Login Button */}
       <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
         <Text style={styles.loginText}>Login</Text>
       </TouchableOpacity>
 
+<<<<<<< HEAD
       {/* Forgot Password (Centered) */}
       <TouchableOpacity
         onPress={() => navigation.navigate('ForgotPasswordNGO')}
@@ -69,21 +85,26 @@ export default function NGOLoginScreen({ navigation }) {
       </TouchableOpacity>
 
       
+=======
+      {/* Sign Up */}
+      <TouchableOpacity>
+        <Text style={styles.signupText}>New to Drishti? Sign up here</Text>
+      </TouchableOpacity>
+>>>>>>> parent of 75e7d00 (aa)
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fcf7f7', padding: 20 },
-  title: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginTop: 20, color: '#850a0a' },
+  container: { flex: 1, backgroundColor: '#FFF8F8', padding: 20 },
+  title: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginTop: 20, color: '#2B0000' },
   subtitle: { textAlign: 'center', color: '#A47171', marginBottom: 25 },
-  label: { fontWeight: 'bold', marginTop: 15, marginBottom: 5, color: '#850a0a' },
+  label: { fontWeight: 'bold', marginTop: 15, marginBottom: 5, color: '#2B0000' },
   input: { backgroundColor: 'white', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#E4C4C4' },
   passwordContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#E4C4C4' },
   passwordInput: { flex: 1, paddingVertical: 12 },
-  loginButton: { backgroundColor: '#850a0a', padding: 14, borderRadius: 8, marginTop: 20, alignItems: 'center' },
+  forgotText: { color: '#A47171', marginTop: 10 },
+  loginButton: { backgroundColor: '#7F0E0E', padding: 14, borderRadius: 8, marginTop: 20, alignItems: 'center' },
   loginText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
-  forgotButton: { marginTop: 15, alignItems: 'center' },
-  forgotText: { color: '#850a0a', fontSize: 14 },
-  signupText: { color: '#850a0a', textAlign: 'center', marginTop: 20, fontSize: 14 }
+  signupText: { color: '#A47171', textAlign: 'center', marginTop: 15 }
 });
