@@ -1,7 +1,50 @@
- Abstract
+# Welcome to your Expo app 👋
 
-            Drishti: Real-Time Missing Person Detection
+This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
-This mini project, titled  Drishti, aims to create a real-time system that helps locate missing persons using a combination of  AI facial recognition and  IoT technology. The process begins when a user (such as a family member or authority) uploads a missing person’ s image through a web or mobile interface. That image is processed by a facial recognition model, which generates a unique facial embedding used for comparison.
-At the same time, a  Raspberry Pi with a camera module is used to continuously capture live video footage in a selected location. The AI system analyzes the video in real-time, detects faces, and compares them to the stored embeddings of missing individuals. If a match is found, the system sends an alert showing the time, location (based on the camera), and evidence image for verification.
-All detections are logged for follow-up, and authorized users can track the results through a simple dashboard or app. Since this is a mini project, the system will demonstrate the core functionality using one or two cameras and a small dataset, focusing on how  AI and IoT can work together for public safety, even on a limited scale.
+## Get started
+
+1. Install dependencies
+
+   ```bash
+   npm install
+   ```
+
+2. Start the app
+
+   ```bash
+   npx expo start
+   ```
+
+In the output, you'll find options to open the app in a
+
+- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
+- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
+- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
+- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+
+You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+
+## Get a fresh project
+
+When you're ready, run:
+
+```bash
+npm run reset-project
+```
+
+This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+
+## Learn more
+
+To learn more about developing your project with Expo, look at the following resources:
+
+- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
+- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+
+## Join the community
+
+Join our community of developers creating universal apps.
+
+- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
+- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
