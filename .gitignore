@@ -1,67 +1,39 @@
-# Node.js
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-dist/
-build/
-.env
-.env.*
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.env
-*.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-*.egg-info/
-*.egg
-.Python
-
-# macOS
-.DS_Store
-
-# Windows
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-# VSCode
-.vscode/
-
-# JetBrains
-.idea/
-
-# Misc
-*.swp
-*.swo
-
-# AI service data
-*.npy
-
-# Expo/React Native/Expo Go
+# Expo
 .expo/
+dist/
 web-build/
 expo-env.d.ts
 
-# Android/iOS build
-*.apk
-*.aab
-*.ipa
-
-# Ignore local credentials and keys
+# Native
+.kotlin/
+*.orig.*
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
 
-# Ignore test coverage
-coverage/
-htmlcov/
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+app-example
