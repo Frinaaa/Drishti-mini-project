@@ -14,9 +14,26 @@ export default function FamilySignupScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async () => {
-    if (!name || !email || !password) {
-      return Alert.alert('Error', 'Please fill name, email, and password.');
+    if (!name || !email || !password || !phone) { // Added phone to the check
+      return Alert.alert('Error', 'Please fill all the fields.');
     }
+
+    // --- CLIENT-SIDE VALIDATION START ---
+    const emailRegex = /\S+@\S+\.\S+/;
+    if (!emailRegex.test(email)) {
+      return Alert.alert('Invalid Email', 'Please enter a valid email address.');
+    }
+
+    const phoneRegex = /^\d{10}$/;
+    if (!phoneRegex.test(phone)) {
+      return Alert.alert('Invalid Phone Number', 'Please enter a valid 10-digit phone number.');
+    }
+
+    if (password.length < 6) {
+      return Alert.alert('Invalid Password', 'Password must be at least 6 characters long.');
+    }
+    // --- CLIENT-SIDE VALIDATION END ---
+
     setLoading(true);
 
     try {
@@ -50,7 +67,7 @@ export default function FamilySignupScreen() {
       <Text style={styles.title}>Family Sign Up</Text>
       <TextInput style={styles.input} placeholder="Full Name" placeholderTextColor="#b94e4e" value={name} onChangeText={setName} />
       <TextInput style={styles.input} placeholder="Email" placeholderTextColor="#b94e4e" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-      <TextInput style={styles.input} placeholder="Phone Number" placeholderTextColor="#b94e4e" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+      <TextInput style={styles.input} placeholder="Phone Number" placeholderTextColor="#b94e4e" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={10} />
       <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#b94e4e" value={password} onChangeText={setPassword} secureTextEntry />
       
       {loading ? (

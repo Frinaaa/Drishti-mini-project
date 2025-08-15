@@ -13,6 +13,17 @@ export default function PoliceLoginScreen() {
       return Alert.alert('Demo', 'Please enter any ID and password to proceed.');
     }
 
+    // --- CLIENT-SIDE VALIDATION START ---
+    const emailRegex = /\S+@\S+\.\S+/;
+    if (!emailRegex.test(email)) {
+      return Alert.alert('Invalid ID', 'Please enter a valid email address for the ID.');
+    }
+
+    if (password.length < 6) {
+      return Alert.alert('Invalid Password', 'Password must be at least 6 characters long.');
+    }
+    // --- CLIENT-SIDE VALIDATION END ---
+
     console.log("Simulating successful police login...");
     router.replace({ pathname: '/(police)/police-dashboard', params: { officerName: 'Demo Officer' } });
   };

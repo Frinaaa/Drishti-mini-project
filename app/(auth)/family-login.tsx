@@ -1,26 +1,67 @@
 import { Link, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import CustomButton from '../../components/CustomButton';
+import { BACKEND_API_URL } from '../../config/api';
 
 export default function FamilyLoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    // No backend call, just validate that inputs are not empty for demo purposes.
+  const handleLogin = async () => {
     if (!email || !password) {
-      return Alert.alert('Demo', 'Please enter any email and password to proceed.');
+      return Alert.alert('Error', 'Please enter both email and password.');
     }
-    
-    console.log("Simulating successful family login...");
-    // Use replace to ensure the user can't navigate back to the auth flow.
-    // Pass a hardcoded name for the demo.
-    router.replace({
-      pathname: '/(family)/family-dashboard',
-      params: { familyName: 'Demo User' },
-    });
+
+    // --- CLIENT-SIDE VALIDATION START ---
+    const emailRegex = /\S+@\S+\.\S+/;
+    if (!emailRegex.test(email)) {
+      return Alert.alert('Invalid Email', 'Please enter a valid email address.');
+    }
+
+    if (password.length < 6) {
+      return Alert.alert('Invalid Password', 'Password must be at least 6 characters long.');
+    }
+    // --- CLIENT-SIDE VALIDATION END ---
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${BACKEND_API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Check if the user has the 'Family' role
+        if (data.user?.role?.role_name === 'Family') {
+          console.log("Successful family login for:", data.user.name);
+          // Use replace to ensure the user can't navigate back to the auth flow.
+          router.replace({
+            pathname: '/(family)/family-dashboard',
+            params: { familyName: data.user.name },
+          });
+        } else {
+          // If the user exists but is not a family member
+          Alert.alert('Access Denied', 'This login is for family members only. Please use the correct login portal.');
+        }
+      } else {
+        // Handle login errors like "Invalid credentials"
+        Alert.alert('Login Failed', data.msg || 'An unknown error occurred.');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      Alert.alert('Connection Error', 'Could not connect to the server. Please check your network connection and try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -44,7 +85,11 @@ export default function FamilyLoginScreen() {
         secureTextEntry 
       />
       
-      <CustomButton title="Login" onPress={handleLogin} />
+      {loading ? (
+        <ActivityIndicator size="large" color="#850a0a" style={{ marginTop: 20 }} />
+      ) : (
+        <CustomButton title="Login" onPress={handleLogin} />
+      )}
       
       <Link href="./family-signup" asChild replace>
         <Text style={styles.loginLink}>Don't have an account? Sign Up</Text>

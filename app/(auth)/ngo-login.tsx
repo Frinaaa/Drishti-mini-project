@@ -13,6 +13,17 @@ export default function NgoLoginScreen() {
       return Alert.alert('Demo', 'Please enter any email and password to proceed.');
     }
 
+    // --- CLIENT-SIDE VALIDATION START ---
+    const emailRegex = /\S+@\S+\.\S+/;
+    if (!emailRegex.test(email)) {
+      return Alert.alert('Invalid Email', 'Please enter a valid email address.');
+    }
+
+    if (password.length < 6) {
+      return Alert.alert('Invalid Password', 'Password must be at least 6 characters long.');
+    }
+    // --- CLIENT-SIDE VALIDATION END ---
+
     console.log("Simulating successful NGO login...");
     router.replace({ pathname: '/(ngo)/ngo-dashboard', params: { ngoName: 'Demo Volunteer' } });
   };

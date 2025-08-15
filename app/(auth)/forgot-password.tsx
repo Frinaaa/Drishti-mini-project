@@ -10,11 +10,19 @@ export default function ForgotPasswordScreen() {
   const handleNext = () => {
     if (!email) {
       Alert.alert('Missing Email', 'Please enter your email.');
-    } else {
-      // Logic to send reset email/link would go here
-      Alert.alert('Password Reset', `If an account exists for ${email}, a reset link has been sent.`);
-      router.back(); // Go back to previous screen
+      return; // Added return to stop execution
     }
+
+    // --- CLIENT-SIDE VALIDATION START ---
+    const emailRegex = /\S+@\S+\.\S+/;
+    if (!emailRegex.test(email)) {
+      return Alert.alert('Invalid Email', 'Please enter a valid email address.');
+    }
+    // --- CLIENT-SIDE VALIDATION END ---
+
+    // Logic to send reset email/link would go here
+    Alert.alert('Password Reset', `If an account exists for ${email}, a reset link has been sent.`);
+    router.back(); // Go back to previous screen
   };
 
   return (
