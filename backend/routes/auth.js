@@ -2,7 +2,8 @@
 
 const express = require('express');
 const router = express.Router();
-const bcrypt = require('bcryptjs');
+// REMOVED: bcryptjs is no longer needed.
+// const bcrypt = require('bcryptjs');
 
 // Import the User and Role models
 const { User, Role } = require('../models');
@@ -23,22 +24,22 @@ router.post('/signup', async (req, res) => {
       return res.status(400).json({ msg: 'User already exists' });
     }
 
-    // Find the 'Family' role. Assumes this role is pre-seeded in the database.
     const familyRole = await Role.findOne({ role_name: 'Family' });
     if (!familyRole) {
-        // This is a server configuration error
         return res.status(500).json({ msg: 'Default user role not found. Please contact support.' });
     }
 
+    // UPDATED: The user is created with the plain-text password directly.
     user = new User({
       name,
       email,
-      password,
-      role: familyRole._id, // Assign the 'Family' role's ID
+      password, // The password is saved as-is, without hashing.
+      role: familyRole._id,
     });
 
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(password, salt);
+    // REMOVED: The password hashing steps have been deleted.
+    // const salt = await bcrypt.genSalt(10);
+    // user.password = await bcrypt.hash(password, salt);
 
     await user.save();
     res.status(201).json({ msg: 'User registered successfully' });
@@ -60,15 +61,13 @@ router.post('/login', async (req, res) => {
     }
 
     try {
-        // Find user by email and populate their role information
         const user = await User.findOne({ email }).populate('role');
         if (!user) {
             return res.status(400).json({ msg: 'Invalid credentials' });
         }
 
-        // Check if password matches
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
+        // UPDATED: Password comparison is now a direct string comparison.
+        if (password !== user.password) {
             return res.status(400).json({ msg: 'Invalid credentials' });
         }
         
@@ -79,7 +78,7 @@ router.post('/login', async (req, res) => {
                 _id: user._id,
                 name: user.name,
                 email: user.email,
-                role: user.role // Contains role_id and role_name
+                role: user.role
             }
         });
 
@@ -106,13 +105,11 @@ router.post('/reset-password', async (req, res) => {
     try {
         const user = await User.findOne({ email });
         if (!user) {
-            // Send a generic message to prevent email enumeration attacks
             return res.status(404).json({ msg: 'User not found' });
         }
 
-        // Hash the new password and update the user document
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(newPassword, salt);
+        // UPDATED: The new password is saved directly as plain text.
+        user.password = newPassword;
         
         await user.save();
 
