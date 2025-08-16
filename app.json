@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Drishti-frontend",
-    "slug": "Drishti-frontend",
+    "slug": "drishti",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -37,6 +37,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "bec39b73-014a-4458-834e-a10295edddf0"
+      }
+    },
+    "owner": "frina"
   }
 }
