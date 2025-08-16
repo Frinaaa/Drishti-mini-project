@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import CustomButton from '../../components/CustomButton';
 import { BACKEND_API_URL } from '../../config/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function FamilyLoginScreen() {
   const router = useRouter();
@@ -43,6 +44,7 @@ export default function FamilyLoginScreen() {
         // Check if the user has the 'Family' role
         if (data.user?.role?.role_name === 'Family') {
           console.log("Successful family login for:", data.user.name);
+          await AsyncStorage.setItem('userId', data.user._id);
           // Use replace to ensure the user can't navigate back to the auth flow.
           router.replace({
             pathname: '/(family)/family-dashboard',

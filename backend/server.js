@@ -18,6 +18,8 @@ app.use(express.json({ extended: false }));
 
 // Define Routes
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/users', require('./routes/users'));
+app.use('/api/ngo', require('./routes/ngo')); // ADD THIS LINE
 app.get('/', (req, res) => res.send('Drishti API Running'));
 
 // --- This logic is correct and remains unchanged ---

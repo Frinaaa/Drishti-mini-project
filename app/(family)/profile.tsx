@@ -1,36 +1,166 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BACKEND_API_URL } from '../../config/api';
+
+const languages = ['English', 'Spanish', 'Hindi', 'French'];
+// REMOVED: The supportContacts array has been deleted.
 
 export default function ProfileScreen() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Your Profile</Text>
-      <Text style={styles.info}>
-        Here you can manage your account details and change your password.
-        To log out, use the icon in the top right of the header.
-      </Text>
-    </View>
-  );
+    const router = useRouter();
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [profileImageUri, setProfileImageUri] = useState(null);
+    const [isLanguagePickerVisible, setLanguagePickerVisible] = useState(false);
+    const [selectedLanguage, setSelectedLanguage] = useState('English');
+    // REMOVED: The isSupportPickerVisible state has been deleted.
+
+    useFocusEffect(
+      useCallback(() => {
+        const loadData = async () => {
+          setLoading(true);
+          try {
+            const userId = await AsyncStorage.getItem('userId');
+            const savedImageUri = await AsyncStorage.getItem('profileImageUri');
+            setProfileImageUri(savedImageUri);
+
+            if (!userId) {
+              router.replace('/(auth)/family-login');
+              return;
+            }
+            const response = await fetch(`${BACKEND_API_URL}/api/users/${userId}`);
+            const data = await response.json();
+            if (response.ok) {
+              setUser(data.user);
+            } else {
+              Alert.alert('Error', 'Could not fetch user data.');
+            }
+          } catch (error) {
+            Alert.alert('Connection Error', 'Could not connect to the server.');
+          } finally {
+            setLoading(false);
+          }
+        };
+        loadData();
+      }, [])
+    );
+    
+    const handleLogout = async () => {
+        await AsyncStorage.removeItem('userId');
+        await AsyncStorage.removeItem('profileImageUri');
+        router.replace('/');
+    };
+
+    if (loading) {
+        return <View style={styles.centered}><ActivityIndicator size="large" color="#850a0a" /></View>;
+    }
+
+    return (
+        <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+            <View style={styles.profileHeader}>
+                <Image 
+                    source={profileImageUri ? { uri: profileImageUri } : require('@/assets/images/frina.png')}
+                    style={styles.avatar} 
+                />
+                <Text style={styles.name}>{user?.name || 'Family Member'}</Text>
+                <Text style={styles.role}>Family Member</Text>
+                <TouchableOpacity style={styles.editButton} onPress={() => user && router.push({ pathname: '/(family)/edit-profile', params: { ...user } })}>
+                    <Text style={styles.editButtonText}>Edit Profile</Text>
+                </TouchableOpacity>
+            </View>
+
+            <View style={styles.settingsContainer}>
+                <Text style={styles.settingsTitle}>Settings</Text>
+                
+                <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/(family)/notifications')}>
+                    <View style={styles.settingIconContainer}><Ionicons name="notifications-outline" size={22} color="#3A0000" /></View>
+                    <Text style={styles.settingLabel}>Notifications</Text>
+                    <Ionicons name="chevron-forward-outline" size={20} color="#A47171" />
+                </TouchableOpacity>
+                
+                {/* UPDATED: onPress now navigates to the new screen */}
+                <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/(family)/privacy-settings')}>
+                    <View style={styles.settingIconContainer}><Ionicons name="lock-closed-outline" size={22} color="#3A0000" /></View>
+                    <Text style={styles.settingLabel}>Privacy Settings</Text>
+                    <Ionicons name="chevron-forward-outline" size={20} color="#A47171" />
+                </TouchableOpacity>
+
+                <View>
+                    <TouchableOpacity style={styles.settingItem} onPress={() => { setLanguagePickerVisible(!isLanguagePickerVisible); }}>
+                        <View style={styles.settingIconContainer}><Ionicons name="globe-outline" size={22} color="#3A0000" /></View>
+                        <Text style={styles.settingLabel}>App Language</Text>
+                        <Text style={styles.selectedValue}>{selectedLanguage}</Text>
+                        <Ionicons name={isLanguagePickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#A47171" />
+                    </TouchableOpacity>
+                    {isLanguagePickerVisible && (
+                        <View style={styles.dropdown}>
+                            {languages.map(lang => (
+                                <TouchableOpacity key={lang} style={styles.dropdownItem} onPress={() => { setSelectedLanguage(lang); setLanguagePickerVisible(false); Alert.alert("Language Changed", `App language set to ${lang}.`) }}>
+                                    <Text style={styles.dropdownText}>{lang}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
+                </View>
+
+                {/* REMOVED: The entire "Contact Support" dropdown View block has been deleted. */}
+
+                <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/aboutUs')}>
+                    <View style={styles.settingIconContainer}><Ionicons name="information-circle-outline" size={22} color="#3A0000" /></View>
+                    <Text style={styles.settingLabel}>About Drishti</Text>
+                    <Ionicons name="chevron-forward-outline" size={20} color="#A47171" />
+                </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+                <Text style={styles.logoutButtonText}>Logout</Text>
+            </TouchableOpacity>
+        </ScrollView>
+    );
 }
 
+// Styles remain the same as before
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    backgroundColor: '#FFFBF8',
-    padding: 20,
-  },
-  title: { 
-    fontSize: 24, 
-    fontWeight: 'bold', 
-    marginBottom: 20, 
-    color: '#3A0000' 
-  },
-  info: {
-    fontSize: 16,
-    color: '#5B4242',
-    textAlign: 'center',
-    lineHeight: 24,
-  }
+    container: { flex: 1, backgroundColor: '#FFFBF8', },
+    scrollContent: { padding: 20, paddingBottom: 80, },
+    profileHeader: { alignItems: 'center', marginBottom: 30, },
+    avatar: { width: 120, height: 120, borderRadius: 60, marginBottom: 15, borderWidth: 3, borderColor: '#F5EAEA', },
+    name: { fontSize: 24, fontWeight: 'bold', color: '#1E1E1E', },
+    role: { fontSize: 16, color: '#850a0a', marginBottom: 20, },
+    editButton: { backgroundColor: '#F5EAEA', paddingVertical: 12, paddingHorizontal: 40, borderRadius: 30, },
+    editButtonText: { color: '#3A0000', fontSize: 16, fontWeight: '600', },
+    settingsContainer: { marginBottom: 30, },
+    settingsTitle: { fontSize: 20, fontWeight: 'bold', color: '#1E1E1E', marginBottom: 10, paddingHorizontal: 5, },
+    settingItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 12, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: '#F0E0E0', },
+    settingIconContainer: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F5EAEA', justifyContent: 'center', alignItems: 'center', marginRight: 15, },
+    settingLabel: { flex: 1, fontSize: 16, color: '#3A0000', },
+    logoutButton: { backgroundColor: '#F5EAEA', paddingVertical: 16, borderRadius: 12, alignItems: 'center', },
+    logoutButtonText: { color: '#870808', fontSize: 16, fontWeight: 'bold', },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFBF8', },
+    selectedValue: {
+        fontSize: 16,
+        color: '#A47171',
+        marginRight: 6,
+    },
+    dropdown: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#F0E0E0',
+        marginTop: -5,
+        marginBottom: 10,
+        overflow: 'hidden',
+    },
+    dropdownItem: {
+        paddingVertical: 12,
+        paddingHorizontal: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0E0E0',
+    },
+    dropdownText: {
+        fontSize: 16,
+        color: '#3A0000',
+    },
 });

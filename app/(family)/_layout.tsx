@@ -44,6 +44,34 @@ export default function FamilyTabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="person-outline" color={color} />,
         }}
       />
+       {/* --- These screens are NOT tabs. They are screens that can be navigated to from within the Profile tab. --- */}
+      {/* By defining them here with href: null, we tell the Tabs navigator they exist but shouldn't be a bottom tab. */}
+      <Tabs.Screen
+        name="edit-profile"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="submit-report" 
+        options={{ 
+          href: null
+
+         }} 
+        />
+        <Tabs.Screen
+        name="privacy-settings" 
+        options={{ 
+          href: null
+
+         }} 
+        />
     </Tabs>
   );
 }

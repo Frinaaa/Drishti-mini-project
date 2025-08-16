@@ -1,36 +1,66 @@
 import { Link, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
+// UPDATED: Import ActivityIndicator
+import { View, Text, TextInput, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import CustomButton from '../../components/CustomButton';
+// ADDED: Import the backend URL
+import { BACKEND_API_URL } from '../../config/api';
 
 export default function NgoLoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // ADDED: State to manage the loading spinner
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
+  // UPDATED: The function is now async to handle the API call
+  const handleLogin = async () => {
     if (!email || !password) {
-      return Alert.alert('Demo', 'Please enter any email and password to proceed.');
+      return Alert.alert('Error', 'Please enter your email and password.');
     }
-
-    // --- CLIENT-SIDE VALIDATION START ---
+    
+    // Client-side validation is good, but the backend also handles it, so we can proceed.
     const emailRegex = /\S+@\S+\.\S+/;
     if (!emailRegex.test(email)) {
       return Alert.alert('Invalid Email', 'Please enter a valid email address.');
     }
-
     if (password.length < 6) {
       return Alert.alert('Invalid Password', 'Password must be at least 6 characters long.');
     }
-    // --- CLIENT-SIDE VALIDATION END ---
+    
+    setLoading(true);
+    try {
+      const response = await fetch(`${BACKEND_API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
 
-    console.log("Simulating successful NGO login...");
-    router.replace({ pathname: '/(ngo)/ngo-dashboard', params: { ngoName: 'Demo Volunteer' } });
+      const data = await response.json();
+
+      if (response.ok) {
+        // Check if the user has the 'NGO' role
+        if (data.user?.role?.role_name === 'NGO') {
+          // No need for an alert on success, the navigation is enough feedback
+          router.replace({ pathname: '/(ngo)/ngo-dashboard', params: { ngoName: data.user.name } });
+        } else {
+          // If the user is valid but not an NGO volunteer
+          Alert.alert('Login Failed', 'This login is for NGO volunteers only.');
+        }
+      } else {
+        // Handle server errors like "Invalid credentials"
+        Alert.alert('Login Failed', data.msg || 'Invalid credentials.');
+      }
+    } catch (error) {
+      console.error('NGO Login Error:', error);
+      Alert.alert('Connection Error', 'Could not connect to the server.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <View style={styles.container}>
-      {/* Title is updated to match the other screens */}
       <Text style={styles.title}>NGO Volunteer Login</Text>
       
       <TextInput 
@@ -51,9 +81,13 @@ export default function NgoLoginScreen() {
         onChangeText={setPassword}
       />
       
-      <CustomButton title="Login" onPress={handleLogin} />
+      {/* UPDATED: Conditionally render a loading indicator or the button */}
+      {loading ? (
+        <ActivityIndicator size="large" color="#850a0a" style={{ marginTop: 10, marginBottom: 10 }} />
+      ) : (
+        <CustomButton title="Login" onPress={handleLogin} />
+      )}
       
-      {/* The "Forgot Password" link is now at the bottom, matching the other login screens */}
       <Link href="./forgot-password" style={styles.linkText} replace>
         Forgot Password?
       </Link>
@@ -61,11 +95,11 @@ export default function NgoLoginScreen() {
   );
 }
 
-// These styles are now based on the FamilyLoginScreen for consistency
+// Styles remain the same
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: '#fcf7f7', // Matched background color
+    backgroundColor: '#fcf7f7',
     padding: 20, 
     justifyContent: 'center' 
   },
@@ -73,7 +107,7 @@ const styles = StyleSheet.create({
     fontSize: 22, 
     fontWeight: 'bold', 
     textAlign: 'center', 
-    marginBottom: 100, // Matched large margin
+    marginBottom: 100,
     color: '#2B0000' 
   },
   input: { 
