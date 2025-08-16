@@ -1,36 +1,137 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BACKEND_API_URL } from '../../config/api';
 
-export default function ProfileScreen() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Your Profile</Text>
-      <Text style={styles.info}>
-        Here you can manage your account details and view your saved information.
-        To log out, use the icon in the top right of the header.
-      </Text>
-    </View>
-  );
+// --- UPDATED: "Notifications" has been removed from the settings list ---
+const settingsItems = [
+  { icon: 'briefcase-outline', label: 'My Assignments', screen: '/(ngo)/my-assignments' },
+  { icon: 'toggle-outline', label: 'Set Availability' },
+  { icon: 'information-circle-outline', label: 'About Drishti', screen: '/aboutUs' },
+];
+
+export default function NgoProfileScreen() {
+    const router = useRouter();
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [profileImageUri, setProfileImageUri] = useState(null); // Add state for profile image
+
+    useFocusEffect(
+      useCallback(() => {
+        const loadData = async () => {
+          setLoading(true);
+          try {
+            const userId = await AsyncStorage.getItem('userId');
+            // Load saved profile image
+            const savedImageUri = await AsyncStorage.getItem('profileImageUri');
+            setProfileImageUri(savedImageUri);
+
+            if (!userId) {
+              router.replace('/(auth)/ngo-login');
+              return;
+            }
+            const response = await fetch(`${BACKEND_API_URL}/api/users/${userId}`);
+            const data = await response.json();
+            if (response.ok) {
+              setUser(data.user);
+            } else {
+              Alert.alert('Error', 'Could not fetch user data.');
+            }
+          } catch (error) {
+            Alert.alert('Connection Error', 'Could not connect to the server.');
+          } finally {
+            setLoading(false);
+          }
+        };
+        loadData();
+      }, [])
+    );
+    
+    // UPDATED: Clear profile image on logout
+    const handleLogout = async () => {
+        await AsyncStorage.removeItem('userId');
+        await AsyncStorage.removeItem('profileImageUri');
+        router.replace('/');
+    };
+
+    const handleSettingPress = (item) => {
+      if (item.screen) {
+        router.push(item.screen);
+      } else {
+        Alert.alert('Coming Soon', `${item.label} feature is under development.`);
+      }
+    };
+
+    if (loading) {
+        return <View style={styles.centered}><ActivityIndicator size="large" color="#850a0a" /></View>;
+    }
+
+    return (
+        <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+            <View style={styles.profileHeader}>
+                <Image 
+                    // Use the state for the profile image source
+                    source={profileImageUri ? { uri: profileImageUri } : require('@/assets/images/jahana.png')}
+                    style={styles.avatar} 
+                />
+                <Text style={styles.name}>{user?.name || 'NGO Volunteer'}</Text>
+                <Text style={styles.role}>NGO Volunteer</Text>
+                {/* 
+                  FIXED: The button is no longer disabled while the user data is loading.
+                  The `user &&` check in onPress handles the case where data isn't ready yet.
+                */}
+                <TouchableOpacity 
+                    style={styles.editButton} 
+                    onPress={() => {
+                        if (user) {
+                            router.push({ pathname: '/(ngo)/edit-profile', params: { ...user } })
+                        } else {
+                            Alert.alert("Please wait", "User data is still loading.")
+                        }
+                    }}
+                >
+                    <Text style={styles.editButtonText}>Edit Profile</Text>
+                </TouchableOpacity>
+            </View>
+
+            <View style={styles.settingsContainer}>
+                <Text style={styles.settingsTitle}>Settings</Text>
+                {settingsItems.map((item, index) => (
+                    <TouchableOpacity key={index} style={styles.settingItem} onPress={() => handleSettingPress(item)}>
+                        <View style={styles.settingIconContainer}>
+                            <Ionicons name={item.icon as any} size={22} color="#3A0000" />
+                        </View>
+                        <Text style={styles.settingLabel}>{item.label}</Text>
+                        <Ionicons name="chevron-forward-outline" size={20} color="#A47171" />
+                    </TouchableOpacity>
+                ))}
+            </View>
+
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+                <Text style={styles.logoutButtonText}>Logout</Text>
+            </TouchableOpacity>
+        </ScrollView>
+    );
 }
 
+// Styles remain the same
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    backgroundColor: '#FFFBF8',
-    padding: 20,
-  },
-  title: { 
-    fontSize: 24, 
-    fontWeight: 'bold', 
-    marginBottom: 20, 
-    color: '#3A0000' 
-  },
-  info: {
-    fontSize: 16,
-    color: '#5B4242',
-    textAlign: 'center',
-    lineHeight: 24,
-  }
+    container: { flex: 1, backgroundColor: '#FFFBF8', },
+    scrollContent: { padding: 20, paddingBottom: 80, },
+    profileHeader: { alignItems: 'center', marginBottom: 30, },
+    avatar: { width: 120, height: 120, borderRadius: 60, marginBottom: 15, borderWidth: 3, borderColor: '#F5EAEA', },
+    name: { fontSize: 24, fontWeight: 'bold', color: '#1E1E1E', },
+    role: { fontSize: 16, color: '#850a0a', marginBottom: 20, },
+    editButton: { backgroundColor: '#F5EAEA', paddingVertical: 12, paddingHorizontal: 40, borderRadius: 30, },
+    editButtonText: { color: '#3A0000', fontSize: 16, fontWeight: '600', },
+    settingsContainer: { marginBottom: 30, },
+    settingsTitle: { fontSize: 20, fontWeight: 'bold', color: '#1E1E1E', marginBottom: 10, paddingHorizontal: 5, },
+    settingItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 12, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: '#F0E0E0', },
+    settingIconContainer: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F5EAEA', justifyContent: 'center', alignItems: 'center', marginRight: 15, },
+    settingLabel: { flex: 1, fontSize: 16, color: '#3A0000', },
+    logoutButton: { backgroundColor: '#F5EAEA', paddingVertical: 16, borderRadius: 12, alignItems: 'center', },
+    logoutButtonText: { color: '#870808', fontSize: 16, fontWeight: 'bold', },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFBF8', },
 });

@@ -43,6 +43,10 @@ export default function NgoTabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="person-outline" color={color} />,
         }}
       />
+      {/* --- These screens are part of the navigator but not visible in the tab bar --- */}
+      <Tabs.Screen name="edit-profile" options={{ href: null }} />
+      <Tabs.Screen name="notifications" options={{ href: null }} />
+      <Tabs.Screen name="my-assignments" options={{ href: null }} />
     </Tabs>
   );
 }
