@@ -49,7 +49,8 @@ export default function FamilySignupScreen() {
 
       if (response.ok) {
         Alert.alert('Success', 'Account created successfully! Please log in.');
-        router.back(); // Go back to the login screen
+        // router.back(); // Go back to the login screen // [-] REMOVE THIS LINE
+        router.replace('./family-login'); // [+] ADD THIS LINE: Explicitly go to login
       } else {
         // Handle errors like "User already exists"
         Alert.alert('Signup Failed', data.msg || 'An unknown error occurred.');
