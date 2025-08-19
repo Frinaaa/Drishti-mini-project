@@ -1,7 +1,7 @@
-// UPDATED: Re-import useState
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+// UPDATED: Added useRouter
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 // --- Data for the page (remains the same) ---
@@ -10,8 +10,6 @@ const overviewData = [
     { title: "AI Matches Checked", value: "15", icon: "git-compare-outline" },
     { title: "Reports Sent to Police", value: "5", icon: "send-outline" },
 ];
-
-// ADDED: The instruction steps are added back
 const howToSteps = [
     "Step 1: Review photos sent by families.",
     "Step 2: Use scan tool to match with AI assistance.",
@@ -21,8 +19,8 @@ const howToSteps = [
 
 export default function NgoDashboardScreen() {
     const { ngoName } = useLocalSearchParams<{ ngoName?: string }>();
-    
-    // ADDED: State to manage the visibility of the instructions
+    // ADDED: Initialize the router for navigation
+    const router = useRouter();
     const [instructionsVisible, setInstructionsVisible] = useState(false);
 
     return (
@@ -45,20 +43,28 @@ export default function NgoDashboardScreen() {
                 
                 {/* --- Actions Section --- */}
                 <Text style={styles.sectionTitle}>Actions</Text>
-                <TouchableOpacity style={styles.actionButton} onPress={() => Alert.alert("Action", "Viewing recent family uploads.")}>
+                {/* UPDATED: This button now navigates to the recent uploads screen */}
+                <TouchableOpacity 
+                    style={styles.actionButton} 
+                    onPress={() => router.push('/(ngo)/recent-uploads')}
+                >
                     <Ionicons name="images-outline" size={22} color="#3A0000" />
                     <Text style={styles.actionButtonText}>Recent Family Uploads</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={() => Alert.alert("Action", "Opening form to register missing person.")}>
+                {/* UPDATED: This button now navigates to the submit report screen */}
+                <TouchableOpacity 
+                    style={styles.actionButton} 
+                    onPress={() => router.push('/(ngo)/submit-report')}
+                >
                     <Ionicons name="person-add-outline" size={22} color="#3A0000" />
                     <Text style={styles.actionButtonText}>Register Missing Person</Text>
                 </TouchableOpacity>
 
-                {/* --- ADDED: The "How to Use Dashboard" section is back --- */}
+                {/* --- How to Use Dashboard Section --- */}
                 <TouchableOpacity 
                   style={styles.howToContainer} 
                   onPress={() => setInstructionsVisible(!instructionsVisible)}
-                  activeOpacity={0.8} // Prevents the full flash on press
+                  activeOpacity={0.8}
                 >
                     <View style={styles.howToHeader}>
                         <Ionicons name="shield-checkmark-outline" size={22} color="#3A0000" />
@@ -84,7 +90,6 @@ export default function NgoDashboardScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFBF8' },
-    // Added paddingBottom to ensure content is not hidden by the tab bar
     scrollContent: { padding: 20, paddingBottom: 80 },
     pageTitle: { fontSize: 22, fontWeight: 'bold', color: '#1E1E1E', marginBottom: 8 },
     welcomeText: { fontSize: 16, color: '#B94E4E', marginBottom: 24 },
@@ -95,7 +100,6 @@ const styles = StyleSheet.create({
     overviewValue: { color: '#1E1E1E', fontWeight: 'bold', fontSize: 24, marginTop: 4 },
     actionButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#F0E0E0', borderRadius: 10, padding: 16, marginBottom: 10 },
     actionButtonText: { fontSize: 16, fontWeight: '600', color: '#3A0000', marginLeft: 12 },
-    // ADDED: Styles for the "How to Use" section
     howToContainer: { backgroundColor: '#F5EAEA', borderRadius: 12, padding: 16, marginTop: 20 },
     howToHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     howToTitle: { flex: 1, fontSize: 16, fontWeight: 'bold', color: '#3A0000', marginLeft: 10 },

@@ -12,6 +12,8 @@ const UserSchema = new Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique:true },
   password: { type: String, required: true },
+  // ADDED: The gender field from code2
+  gender: { type: String },
   // Reference to a document in the 'Role' collection
   role: { type: Schema.Types.ObjectId, ref: 'Role', required: true },
   is_verified: { type: Boolean, default: false }
@@ -25,6 +27,12 @@ const MissingReportSchema = new Schema({
   gender: { type: String, enum: ['Male', 'Female', 'Other'], required: true },
   age: { type: Number, required: true },
   last_seen: { type: String, required: true },
+
+  // ADDED: The new report fields from code2
+  description: { type: String },
+  relationToReporter: { type: String },
+  reporterContact: { type: String },
+
   photo_url: { type: String },
   status: { type: String, default: 'Pending', required: true },
   reported_at: { type: Date, default: Date.now }

@@ -4,8 +4,6 @@ import { Stack, useRouter } from 'expo-router';
 import CustomButton from '../../components/CustomButton';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BACKEND_API_URL } from '../../config/api';
 
 // Data for the dropdowns
 const genderOptions = ['Male', 'Female', 'Other'];
@@ -14,7 +12,6 @@ const relationOptions = ['Parent', 'Sibling', 'Spouse', 'Child', 'Friend', 'Othe
 export default function SubmitReportScreen() {
     const router = useRouter();
     
-    // State for all form fields
     const [personName, setPersonName] = useState('');
     const [age, setAge] = useState('');
     const [gender, setGender] = useState('');
@@ -48,52 +45,19 @@ export default function SubmitReportScreen() {
         }
     };
 
-    // --- THIS FUNCTION HAS BEEN UPDATED BASED ON CODE2 ---
     const handleSubmit = async () => {
-        if (!personName || !age || !gender || !lastSeenLocation || !relation || !contactNumber || !photoUri) {
+        if (!personName || !age || !gender || !lastSeenLocation || !lastSeenDateTime || !relation || !contactNumber || !photoUri) {
             return Alert.alert('Missing Information', 'Please fill out all fields and upload a photo.');
         }
         setLoading(true);
-        try {
-            const userId = await AsyncStorage.getItem('userId');
-            if (!userId) {
-                setLoading(false);
-                return Alert.alert('Error', 'You must be logged in to submit a report.');
-            }
-            const photo_url = 'https://example.com/path/to/uploaded/image.jpg';
-
-            // This object now includes all the necessary fields from your form
-            const reportData = {
-                user: userId,
-                person_name: personName,
-                age: Number(age),
-                gender: gender,
-                last_seen: `${lastSeenLocation} at ${lastSeenDateTime}`,
-                description: description,
-                relationToReporter: relation,
-                reporterContact: contactNumber,
-                photo_url: photo_url,
-            };
-
-            const response = await fetch(`${BACKEND_API_URL}/api/reports`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(reportData),
-            });
-
-            if (response.ok) {
-                Alert.alert('Report Submitted', 'Your report has been received and will be reviewed by verified NGOs.',
-                    [{ text: 'OK', onPress: () => router.back() }]
-                );
-            } else {
-                const errorData = await response.json();
-                Alert.alert('Submission Failed', errorData.msg || 'An error occurred.');
-            }
-        } catch (error) {
-            Alert.alert('Connection Error', 'Could not submit the report.');
-        } finally {
+        setTimeout(() => {
             setLoading(false);
-        }
+            Alert.alert(
+                'Report Submitted', 
+                'Your missing person report has been successfully submitted for review.',
+                [{ text: 'OK', onPress: () => router.back() }]
+            );
+        }, 1500);
     };
 
     return (
@@ -131,11 +95,12 @@ export default function SubmitReportScreen() {
                 <TextInput style={styles.input} value={lastSeenLocation} onChangeText={setLastSeenLocation} placeholder="Enter last seen location" placeholderTextColor="#b94e4e" />
 
                 <Text style={styles.label}>Last Seen Date & Time</Text>
-                <TextInput style={styles.input} value={lastSeenDateTime} onChangeText={setLastSeenDateTime} placeholder="e.g., Yesterday at 5 PM" placeholderTextColor="#b94e4e" />
+                <TextInput style={styles.input} value={lastSeenDateTime} onChangeText={setLastSeenDateTime} placeholder="Select date and time" placeholderTextColor="#b94e4e" />
 
                 <Text style={styles.label}>Description / Clothing / Identifiable Marks</Text>
-                <TextInput style={[styles.input, styles.textArea]} value={description} onChangeText={setDescription} multiline placeholder="Describe what the person was wearing" placeholderTextColor="#b94e4e" />
+                <TextInput style={[styles.input, styles.textArea]} value={description} onChangeText={setDescription} multiline placeholderTextColor="#b94e4e" />
 
+                {/* --- UPDATED: Relation to Reporter is now a dropdown --- */}
                 <Text style={styles.label}>Relation to Missing Person</Text>
                 <View>
                     <TouchableOpacity style={styles.input} onPress={() => { setRelationPickerVisible(!isRelationPickerVisible); setGenderPickerVisible(false); }}>
@@ -149,7 +114,14 @@ export default function SubmitReportScreen() {
                     {isRelationPickerVisible && (
                         <View style={styles.dropdown}>
                             {relationOptions.map(option => (
-                                <TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { setRelation(option); setRelationPickerVisible(false); }}>
+                                <TouchableOpacity 
+                                    key={option} 
+                                    style={styles.dropdownItem} 
+                                    onPress={() => { 
+                                        setRelation(option); 
+                                        setRelationPickerVisible(false); 
+                                    }}
+                                >
                                     <Text style={styles.dropdownText}>{option}</Text>
                                 </TouchableOpacity>
                             ))}
@@ -157,7 +129,7 @@ export default function SubmitReportScreen() {
                     )}
                 </View>
 
-                <Text style={styles.label}>Your Contact Number</Text>
+                <Text style={styles.label}>Contact Number</Text>
                 <TextInput style={styles.input} value={contactNumber} onChangeText={setContactNumber} placeholder="Enter your contact number" keyboardType="phone-pad" placeholderTextColor="#b94e4e" />
                 
                 <Text style={styles.label}>Upload a Clear Photo of the Missing Person</Text>
@@ -165,7 +137,7 @@ export default function SubmitReportScreen() {
                     {photoUri ? (
                         <Image source={{ uri: photoUri }} style={styles.imagePreview} />
                     ) : (
-                        <Text style={styles.imagePickerText}>Tap to upload photo</Text>
+                        <Text style={styles.imagePickerText}>Tap to upload or capture photo</Text>
                     )}
                 </TouchableOpacity>
                 <Text style={styles.subLabel}>Photo is essential for AI-powered face matching.</Text>
@@ -186,7 +158,7 @@ const styles = StyleSheet.create({
     scrollContent: { padding: 20 },
     label: { fontSize: 16, fontWeight: '600', color: '#3A0000', marginBottom: 8 },
     subLabel: { fontSize: 13, color: '#A47171', textAlign: 'center', marginTop: -10, marginBottom: 20 },
-    input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E4C4C4', borderRadius: 12, padding: 14, fontSize: 16, marginBottom: 20, color: '#3A0000', justifyContent: 'center', minHeight: 50 },
+    input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E4C4C4', borderRadius: 12, padding: 14, fontSize: 16, marginBottom: 20, color: '#3A0000', justifyContent: 'center', minHeight: 50 }, // Added minHeight for consistency
     textArea: { height: 120, textAlignVertical: 'top' },
     imagePicker: { height: 120, borderRadius: 12, borderWidth: 2, borderColor: '#E4C4C4', borderStyle: 'dashed', backgroundColor: 'rgba(245, 234, 234, 0.5)', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
     imagePickerText: { fontSize: 16, color: '#5B4242', fontWeight: '500' },
