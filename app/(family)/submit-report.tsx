@@ -48,7 +48,7 @@ export default function SubmitReportScreen() {
         }
     };
 
-    // --- THIS FUNCTION HAS BEEN UPDATED BASED ON CODE2 ---
+    // --- THIS FUNCTION HAS BEEN UPDATED TO CONNECT TO THE BACKEND ---
     const handleSubmit = async () => {
         if (!personName || !age || !gender || !lastSeenLocation || !relation || !contactNumber || !photoUri) {
             return Alert.alert('Missing Information', 'Please fill out all fields and upload a photo.');
@@ -60,6 +60,7 @@ export default function SubmitReportScreen() {
                 setLoading(false);
                 return Alert.alert('Error', 'You must be logged in to submit a report.');
             }
+            // In a real app, you would upload the image and get a URL. We use a placeholder for now.
             const photo_url = 'https://example.com/path/to/uploaded/image.jpg';
 
             // This object now includes all the necessary fields from your form
@@ -90,7 +91,8 @@ export default function SubmitReportScreen() {
                 Alert.alert('Submission Failed', errorData.msg || 'An error occurred.');
             }
         } catch (error) {
-            Alert.alert('Connection Error', 'Could not submit the report.');
+            console.error('Report submission error:', error);
+            Alert.alert('Connection Error', 'Could not submit the report. Please check your network and try again.');
         } finally {
             setLoading(false);
         }

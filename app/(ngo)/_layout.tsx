@@ -47,7 +47,7 @@ export default function NgoTabLayout() {
       <Tabs.Screen name="edit-profile" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="my-assignments" options={{ href: null }} />
-      <Tabs.Screen name="submit-report" options={{ href: null }} />
+      <Tabs.Screen name="submit-reports" options={{ href: null }} />
       <Tabs.Screen name="recent-uploads" options={{ href: null }} />
       <Tabs.Screen name="report-detail" options={{ href: null }} />
     </Tabs>

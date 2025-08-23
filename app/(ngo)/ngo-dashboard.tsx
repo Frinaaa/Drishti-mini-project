@@ -43,18 +43,18 @@ export default function NgoDashboardScreen() {
                 
                 {/* --- Actions Section --- */}
                 <Text style={styles.sectionTitle}>Actions</Text>
-                {/* UPDATED: This button now navigates to the recent uploads screen */}
+                {/* FIXED: Removed the invalid '(ngo)' group segment from the navigation path */}
                 <TouchableOpacity 
                     style={styles.actionButton} 
-                    onPress={() => router.push('/(ngo)/recent-uploads')}
+                    onPress={() => router.push('/recent-uploads')}
                 >
                     <Ionicons name="images-outline" size={22} color="#3A0000" />
                     <Text style={styles.actionButtonText}>Recent Family Uploads</Text>
                 </TouchableOpacity>
-                {/* UPDATED: This button now navigates to the submit report screen */}
+                {/* FIXED: Removed the invalid '(ngo)' group segment from the navigation path */}
                 <TouchableOpacity 
                     style={styles.actionButton} 
-                    onPress={() => router.push('/(ngo)/submit-report')}
+                    onPress={() => router.push('/submit-report')}
                 >
                     <Ionicons name="person-add-outline" size={22} color="#3A0000" />
                     <Text style={styles.actionButtonText}>Register Missing Person</Text>
