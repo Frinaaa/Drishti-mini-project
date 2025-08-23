@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Alert, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, Alert, Image, TouchableTouchableOpacity } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import CustomButton from '../../components/CustomButton';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-// ADDED: Imports for backend connection
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_API_URL } from '../../config/api';
 
@@ -31,6 +30,19 @@ export default function SubmitReportScreen() {
     const [isGenderPickerVisible, setGenderPickerVisible] = useState(false);
     const [isRelationPickerVisible, setRelationPickerVisible] = useState(false);
 
+    // --- ADDED: Function to clear all form fields after submission ---
+    const resetForm = () => {
+        setPersonName('');
+        setAge('');
+        setGender('');
+        setLastSeenLocation('');
+        setLastSeenDateTime('');
+        setDescription('');
+        setRelation('');
+        setContactNumber('');
+        setPhotoUri(null);
+    };
+
     const handleImagePick = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
@@ -48,7 +60,6 @@ export default function SubmitReportScreen() {
         }
     };
 
-    // --- THIS FUNCTION IS NOW CONNECTED TO THE BACKEND ---
     const handleSubmit = async () => {
         if (!personName || !age || !gender || !lastSeenLocation || !relation || !contactNumber || !photoUri) {
             return Alert.alert('Missing Information', 'Please fill out all fields and upload a photo.');
@@ -60,8 +71,6 @@ export default function SubmitReportScreen() {
                 setLoading(false);
                 return Alert.alert('Authentication Error', 'You must be logged in to submit a report.');
             }
-            // In a real app, you would upload the image to a service like S3/Cloudinary and get a URL.
-            // For now, we'll use a placeholder.
             const photo_url = 'https://example.com/path/to/uploaded/image.jpg';
 
             const reportData = {
@@ -83,11 +92,13 @@ export default function SubmitReportScreen() {
             });
 
             if (response.ok) {
+                // --- UPDATED: Alert now simply dismisses, then the form is reset ---
                 Alert.alert(
                     'Report Submitted',
                     'The missing person report has been successfully submitted.',
-                    [{ text: 'OK', onPress: () => router.back() }]
+                    [{ text: 'OK' }]
                 );
+                resetForm(); // This will clear the form for a new entry
             } else {
                 const errorData = await response.json();
                 Alert.alert('Submission Failed', errorData.msg || 'An error occurred while submitting the report.');

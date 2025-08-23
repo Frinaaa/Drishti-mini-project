@@ -31,6 +31,19 @@ export default function SubmitReportScreen() {
     const [isGenderPickerVisible, setGenderPickerVisible] = useState(false);
     const [isRelationPickerVisible, setRelationPickerVisible] = useState(false);
 
+    // --- ADDED: Function to clear all form fields after submission ---
+    const resetForm = () => {
+        setPersonName('');
+        setAge('');
+        setGender('');
+        setLastSeenLocation('');
+        setLastSeenDateTime('');
+        setDescription('');
+        setRelation('');
+        setContactNumber('');
+        setPhotoUri(null);
+    };
+
     const handleImagePick = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
@@ -48,7 +61,6 @@ export default function SubmitReportScreen() {
         }
     };
 
-    // --- THIS FUNCTION HAS BEEN UPDATED TO CONNECT TO THE BACKEND ---
     const handleSubmit = async () => {
         if (!personName || !age || !gender || !lastSeenLocation || !relation || !contactNumber || !photoUri) {
             return Alert.alert('Missing Information', 'Please fill out all fields and upload a photo.');
@@ -60,10 +72,8 @@ export default function SubmitReportScreen() {
                 setLoading(false);
                 return Alert.alert('Error', 'You must be logged in to submit a report.');
             }
-            // In a real app, you would upload the image and get a URL. We use a placeholder for now.
             const photo_url = 'https://example.com/path/to/uploaded/image.jpg';
 
-            // This object now includes all the necessary fields from your form
             const reportData = {
                 user: userId,
                 person_name: personName,
@@ -83,9 +93,13 @@ export default function SubmitReportScreen() {
             });
 
             if (response.ok) {
-                Alert.alert('Report Submitted', 'Your report has been received and will be reviewed by verified NGOs.',
-                    [{ text: 'OK', onPress: () => router.back() }]
+                // --- UPDATED: Alert now simply dismisses, then the form is reset ---
+                Alert.alert(
+                    'Report Submitted', 
+                    'Your report has been received and will be reviewed by verified NGOs.',
+                    [{ text: 'OK' }]
                 );
+                resetForm(); // This will clear the form for a new entry
             } else {
                 const errorData = await response.json();
                 Alert.alert('Submission Failed', errorData.msg || 'An error occurred.');
