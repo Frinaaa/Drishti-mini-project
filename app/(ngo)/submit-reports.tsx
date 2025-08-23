@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Alert, Image, TouchableTouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, Alert, Image, TouchableOpacity } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import CustomButton from '../../components/CustomButton';
 import * as ImagePicker from 'expo-image-picker';
