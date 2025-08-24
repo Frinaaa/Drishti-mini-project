@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-// UPDATED: Added useRouter
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+// Using the recommended path alias for robust imports
+import { BACKEND_API_URL } from '@/config/api'; 
 
-// --- Data for the page (remains the same) ---
+// --- Static Data ---
 const overviewData = [
-    { title: "Photos Reviewed Today", value: "25", icon: "image-outline" },
-    { title: "AI Matches Checked", value: "15", icon: "git-compare-outline" },
-    { title: "Reports Sent to Police", value: "5", icon: "send-outline" },
+    { title: "Photos Reviewed Today", value: "25", icon: "image-outline" as const },
+    { title: "AI Matches Checked", value: "15", icon: "git-compare-outline" as const },
+    { title: "Reports Sent to Police", value: "5", icon: "send-outline" as const },
 ];
 const howToSteps = [
     "Step 1: Review photos sent by families.",
@@ -19,7 +20,6 @@ const howToSteps = [
 
 export default function NgoDashboardScreen() {
     const { ngoName } = useLocalSearchParams<{ ngoName?: string }>();
-    // ADDED: Initialize the router for navigation
     const router = useRouter();
     const [instructionsVisible, setInstructionsVisible] = useState(false);
 
@@ -34,7 +34,7 @@ export default function NgoDashboardScreen() {
                 <View style={styles.overviewContainer}>
                     {overviewData.map((item, index) => (
                         <View key={index} style={styles.overviewCard}>
-                            <Ionicons name={item.icon as any} size={30} color="#850a0a" />
+                            <Ionicons name={item.icon} size={30} color="#850a0a" />
                             <Text style={styles.overviewTitle}>{item.title}</Text>
                             <Text style={styles.overviewValue}>{item.value}</Text>
                         </View>
@@ -43,18 +43,29 @@ export default function NgoDashboardScreen() {
                 
                 {/* --- Actions Section --- */}
                 <Text style={styles.sectionTitle}>Actions</Text>
-                {/* FIXED: Removed the invalid '(ngo)' group segment from the navigation path */}
+
+                {/* The new action button to submit a request to the police */}
                 <TouchableOpacity 
                     style={styles.actionButton} 
-                    onPress={() => router.push('/recent-uploads')}
+                    onPress={() => router.push('/(ngo)/submit-request')}
+                >
+                    <Ionicons name="shield-checkmark-outline" size={22} color="#3A0000" />
+                    <Text style={styles.actionButtonText}>Submit Request to Police</Text>
+                </TouchableOpacity>
+
+                {/* CORRECTED PATH: Navigation now correctly includes the '(ngo)' group segment. */}
+                <TouchableOpacity 
+                    style={styles.actionButton} 
+                    onPress={() => router.push('/(ngo)/recent-uploads')}
                 >
                     <Ionicons name="images-outline" size={22} color="#3A0000" />
                     <Text style={styles.actionButtonText}>Recent Family Uploads</Text>
                 </TouchableOpacity>
-                {/* FIXED: Removed the invalid '(ngo)' group segment from the navigation path */}
+                
+                {/* CORRECTED PATH: Navigation now correctly includes the '(ngo)' group segment. */}
                 <TouchableOpacity 
                     style={styles.actionButton} 
-                    onPress={() => router.push('/submit-report')}
+                    onPress={() => router.push('/(ngo)/submit-reports')}
                 >
                     <Ionicons name="person-add-outline" size={22} color="#3A0000" />
                     <Text style={styles.actionButtonText}>Register Missing Person</Text>

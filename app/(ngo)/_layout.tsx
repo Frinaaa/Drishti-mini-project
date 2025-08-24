@@ -50,6 +50,7 @@ export default function NgoTabLayout() {
       <Tabs.Screen name="submit-reports" options={{ href: null }} />
       <Tabs.Screen name="recent-uploads" options={{ href: null }} />
       <Tabs.Screen name="report-detail" options={{ href: null }} />
+      <Tabs.Screen name="submit-request" options={{ href: null }} />
     </Tabs>
   );
 }

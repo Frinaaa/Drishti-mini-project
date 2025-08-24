@@ -1,81 +1,55 @@
-// models.js
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
-// Role Schema - Defines user roles like 'Family', 'Police', 'NGO'
-const RoleSchema = new Schema({
-  role_name: { type: String, required: true, unique: true }
-});
+// --- Core Schemas ---
+const RoleSchema = new Schema({ role_name: { type: String, required: true, unique: true } });
 
-// Users Schema
 const UserSchema = new Schema({
   name: { type: String, required: true },
-  email: { type: String, required: true, unique:true },
+  email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  // ADDED: The gender field from code2
   gender: { type: String },
-  // Reference to a document in the 'Role' collection
   role: { type: Schema.Types.ObjectId, ref: 'Role', required: true },
-  is_verified: { type: Boolean, default: false }
+  
+  /*
+   * UPDATED: The old `is_verified: Boolean` is replaced by this more
+   * descriptive status field. This is the core of the new logic.
+   */
+  verification_status: { 
+    type: String, 
+    enum: ['Pending', 'Approved', 'Rejected'], 
+    default: 'Pending' 
+  },
 });
 
-// MissingReport Schema
-const MissingReportSchema = new Schema({
-  // The family member who filed the report
-  user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  person_name: { type: String, required: true },
-  gender: { type: String, enum: ['Male', 'Female', 'Other'], required: true },
-  age: { type: Number, required: true },
-  last_seen: { type: String, required: true },
+// --- Feature-Specific Schemas (Unchanged) ---
+const MissingReportSchema = new Schema({ user: { type: Schema.Types.ObjectId, ref: 'User', required: true }, person_name: { type: String, required: true }, gender: { type: String, enum: ['Male', 'Female', 'Other'], required: true }, age: { type: Number, required: true }, last_seen: { type: String, required: true }, description: { type: String }, relationToReporter: { type: String }, reporterContact: { type: String }, photo_url: { type: String }, status: { type: String, default: 'Pending', required: true }, reported_at: { type: Date, default: Date.now } });
+const UploadedPhotoSchema = new Schema({ uploader: { type: Schema.Types.ObjectId, ref: 'User', required: true }, location: { type: String, required: true }, image_url: { type: String, required: true }, uploaded_at: { type: Date, default: Date.now } });
+const NGOReportSchema = new Schema({ ngo_user: { type: Schema.Types.ObjectId, ref: 'User', required: true }, missing_report: { type: Schema.Types.ObjectId, ref: 'MissingReport', required: true }, comments: { type: String }, submitted_at: { type: Date, default: Date.now } });
+const AlertsSchema = new Schema({ recipient: { type: Schema.Types.ObjectId, ref: 'User', required: true }, uploaded_photo: { type: Schema.Types.ObjectId, ref: 'UploadedPhoto', required: true }, missing_report: { type: Schema.Types.ObjectId, ref: 'MissingReport', required: true }, is_verified: { type: Boolean, default: false }, comments: { type: String }, alert_time: { type: Date, default: Date.now } });
+const RequestSchema = new Schema({ requestId: { type: String, unique: true, required: true, }, dateOfRequest: { type: Date, default: Date.now, }, location: { type: String, required: true, }, contact: { type: String, required: true, }, documentPath: { type: String, }, status: { type: String, enum: ['Pending Review', 'Approved', 'Rejected'], default: 'Pending Review', }, ngo_user: { type: Schema.Types.ObjectId, ref: 'User', required: true } });
+RequestSchema.pre('save', async function (next) { if (this.isNew) { const lastRequest = await this.constructor.findOne({}, {}, { sort: { 'dateOfRequest': -1 } }); const nextId = lastRequest ? parseInt(lastRequest.requestId.split('-')[1]) + 1 : 1001; this.requestId = `REQ-${String(nextId).padStart(5, '0')}`; } next(); });
 
-  // ADDED: The new report fields from code2
-  description: { type: String },
-  relationToReporter: { type: String },
-  reporterContact: { type: String },
-
-  photo_url: { type: String },
-  status: { type: String, default: 'Pending', required: true },
-  reported_at: { type: Date, default: Date.now }
-});
-
-// UploadedPhoto Schema
-const UploadedPhotoSchema = new Schema({
-  // The user (e.g., NGO) who uploaded the photo
-  uploader: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  location: { type: String, required: true },
-  image_url: { type: String, required: true },
-  uploaded_at: { type: Date, default: Date.now }
-});
-
-// NGOReport Schema
-const NGOReportSchema = new Schema({
-  // The NGO user who is filing a follow-up
-  ngo_user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  // The original missing person report this is related to
-  missing_report: { type: Schema.Types.ObjectId, ref: 'MissingReport', required: true },
-  comments: { type: String },
-  submitted_at: { type: Date, default: Date.now }
-});
-
-// Alerts Schema
-const AlertsSchema = new Schema({
-  // The user (Police/Family) who receives the alert
+/*
+ * ADDED: A new schema to handle in-app notifications.
+ */
+const NotificationSchema = new Schema({
   recipient: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  // The photo that triggered the alert
-  uploaded_photo: { type: Schema.Types.ObjectId, ref: 'UploadedPhoto', required: true },
-  // The missing person report it matches
-  missing_report: { type: Schema.Types.ObjectId, ref: 'MissingReport', required: true },
-  is_verified: { type: Boolean, default: false },
-  comments: { type: String },
-  alert_time: { type: Date, default: Date.now }
+  message: { type: String, required: true },
+  is_read: { type: Boolean, default: false },
+  created_at: { type: Date, default: Date.now }
 });
 
-// Export Models
+/*
+ * FINAL EXPORTS: All models, including the new Notification model, are exported.
+ */
 module.exports = {
   Role: mongoose.model('Role', RoleSchema),
   User: mongoose.model('User', UserSchema),
   MissingReport: mongoose.model('MissingReport', MissingReportSchema),
   UploadedPhoto: mongoose.model('UploadedPhoto', UploadedPhotoSchema),
   NGOReport: mongoose.model('NGOReport', NGOReportSchema),
-  Alert: mongoose.model('Alert', AlertsSchema)
+  Alert: mongoose.model('Alert', AlertsSchema),
+  Request: mongoose.model('Request', RequestSchema),
+  Notification: mongoose.model('Notification', NotificationSchema)
 };
