@@ -1,50 +1,56 @@
 import { Link, useRouter } from 'expo-router';
-// UPDATED: Import useState and ActivityIndicator
+// THIS IS THE CORRECTED LINE
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import CustomButton from '../../components/CustomButton';
-// ADDED: Import the backend URL
+// ADDED: Import AsyncStorage to save the login token
+import AsyncStorage from '@react-native-async-storage/async-storage';
+// It's better to use the path alias if you have it set up
 import { BACKEND_API_URL } from '../../config/api';
 
 export default function PoliceLoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  // ADDED: State to manage the loading spinner
   const [loading, setLoading] = useState(false);
 
-  // UPDATED: The function is now async to handle the API call
   const handleLogin = async () => {
     if (!email || !password) {
       return Alert.alert('Error', 'Please enter your ID and password.');
     }
-
-    // --- REMOVED CLIENT-SIDE VALIDATION TO RELY ON BACKEND ---
-    // You can re-add it if you want both client and server validation.
-
     setLoading(true);
 
     try {
        const response = await fetch(`${BACKEND_API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        // IMPORTANT: Ensure your backend expects the 'role' field for police login
+        body: JSON.stringify({ email, password, role: 'Police' }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        // Check if the user has the 'Police' role
         if (data.user?.role?.role_name === 'Police') {
+
+          /*
+           * ==================================================================
+           * THIS IS THE CRITICAL FIX
+           * Before navigating, we MUST save the authentication token and user ID
+           * that the server sent back.
+           * ==================================================================
+           */
+          await AsyncStorage.setItem('authToken', data.token);
+          await AsyncStorage.setItem('userId', data.user._id);
+
           Alert.alert('Success', 'Logged in successfully!');
-          // Navigate to the police dashboard
+          // Now that the token is saved, we can safely navigate to the dashboard.
           router.replace({ pathname: '/(police)/police-dashboard', params: { officerName: data.user.name } });
+
         } else {
-          // If the user is valid but not a police officer
           Alert.alert('Login Failed', 'This login is for Police Officers only.');
         }
       } else {
-         // Handle errors from the server, like "Invalid credentials"
          Alert.alert('Login Failed', data.msg || 'Invalid credentials.');
       }
     } catch (error) {
@@ -76,7 +82,6 @@ export default function PoliceLoginScreen() {
         secureTextEntry 
       />
       
-      {/* UPDATED: Show a loading spinner during the API call */}
       {loading ? (
         <ActivityIndicator size="large" color="#850a0a" style={{ marginTop: 10, marginBottom: 10 }} />
       ) : (
