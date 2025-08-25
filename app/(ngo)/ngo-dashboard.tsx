@@ -3,8 +3,18 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-const overviewData = [ /* ... unchanged ... */ ];
-const howToSteps = [ /* ... unchanged ... */ ];
+// --- Static Data ---
+const overviewData = [
+    { title: "Photos Reviewed Today", value: "25", icon: "image-outline" as const },
+    { title: "AI Matches Checked", value: "15", icon: "git-compare-outline" as const },
+    { title: "Reports Sent to Police", value: "5", icon: "send-outline" as const },
+];
+const howToSteps = [
+    "Step 1: Review photos sent by families.",
+    "Step 2: Use scan tool to match with AI assistance.",
+    "Step 3: Verify family identity.",
+    "Step 4: Send credible matches to police.",
+];
 
 export default function NgoDashboardScreen() {
     const { ngoName } = useLocalSearchParams<{ ngoName?: string }>();
@@ -17,52 +27,68 @@ export default function NgoDashboardScreen() {
                 <Text style={styles.pageTitle}>NGO Dashboard</Text>
                 <Text style={styles.welcomeText}>Welcome back, {ngoName || 'Volunteer'} 👋</Text>
 
-                {/* --- Overview Section (Unchanged) --- */}
+                {/* --- Overview Section --- */}
                 <Text style={styles.sectionTitle}>Overview</Text>
                 <View style={styles.overviewContainer}>
-                    {/* ... unchanged mapping ... */}
+                    {overviewData.map((item, index) => (
+                        <View key={index} style={styles.overviewCard}>
+                            <Ionicons name={item.icon} size={30} color="#850a0a" />
+                            <Text style={styles.overviewTitle}>{item.title}</Text>
+                            <Text style={styles.overviewValue}>{item.value}</Text>
+                        </View>
+                    ))}
                 </View>
                 
-                {/* --- Actions Section (UPDATED) --- */}
+                {/* --- Actions Section --- */}
                 <Text style={styles.sectionTitle}>Actions</Text>
 
-                {/* 
-                  ==================================================================
-                  REMOVED: The "Submit Request to Police" button has been
-                  deleted from this file. That action is now handled by the
-                  public-facing screen in the (auth) group.
-                  ==================================================================
-                */}
+                {/* REMOVED: The "Submit Request to Police" button has been deleted. */}
 
-                {/* Your other action buttons remain */}
+                {/* CORRECTED PATH: Navigation path is now correct for Expo Router. */}
                 <TouchableOpacity 
                     style={styles.actionButton} 
-                    onPress={() => router.push('/(ngo)/recent-uploads')}
+                    onPress={() => router.push('/recent-uploads')}
                 >
                     <Ionicons name="images-outline" size={22} color="#3A0000" />
                     <Text style={styles.actionButtonText}>Recent Family Uploads</Text>
                 </TouchableOpacity>
+                
+                {/* CORRECTED PATH & TYPO: Navigation path is now correct and 'submit-reports' is fixed to 'submit-report'. */}
                 <TouchableOpacity 
                     style={styles.actionButton} 
-                    onPress={() => router.push('/(ngo)/submit-reports')}
+                    onPress={() => router.push('/submit-report')}
                 >
                     <Ionicons name="person-add-outline" size={22} color="#3A0000" />
                     <Text style={styles.actionButtonText}>Register Missing Person</Text>
                 </TouchableOpacity>
 
-                {/* --- How to Use Dashboard Section (Unchanged) --- */}
+                {/* --- How to Use Dashboard Section --- */}
                 <TouchableOpacity 
                   style={styles.howToContainer} 
                   onPress={() => setInstructionsVisible(!instructionsVisible)}
                   activeOpacity={0.8}
                 >
-                   {/* ... unchanged content ... */}
+                    <View style={styles.howToHeader}>
+                        <Ionicons name="shield-checkmark-outline" size={22} color="#3A0000" />
+                        <Text style={styles.howToTitle}>How to Use Dashboard</Text>
+                        <Ionicons 
+                          name={instructionsVisible ? 'chevron-up-outline' : 'chevron-down-outline'} 
+                          size={22} 
+                          color="#3A0000" 
+                        />
+                    </View>
+                    {instructionsVisible && (
+                        <View style={styles.howToContent}>
+                            {howToSteps.map((step, index) => (
+                                <Text key={index} style={styles.howToStep}>{step}</Text>
+                            ))}
+                        </View>
+                    )}
                 </TouchableOpacity>
             </ScrollView>
         </View>
     );
 }
-
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFBF8' },
