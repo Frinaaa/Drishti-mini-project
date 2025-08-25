@@ -1,30 +1,51 @@
-// /backend-service/db.js
-
 const mongoose = require('mongoose');
 
-// It's good practice to handle the .env loading in the main server file,
-// but we'll leave this as is for now.
-
+// This function is responsible for establishing the connection to your MongoDB database.
 const connectDB = async () => {
   try {
-    // --- THIS IS THE CRUCIAL DEBUGGING LINE ---
-    // It will print the exact value that Mongoose is about to use.
-    console.log("DEBUG: Attempting to connect with this URI:", process.env.MONGO_URI);
-    // -----------------------------------------
-
-    // Add a check to ensure the environment variable is loaded before trying to connect.
+    // --- STEP 1: PRE-CONNECTION CHECK ---
+    // First, verify that the MONGO_URI environment variable has been loaded successfully.
+    // This is the most common point of failure.
     if (!process.env.MONGO_URI) {
-      console.error('ERROR: MONGO_URI is not defined. Please ensure you have a .env file in the project root with the MONGO_URI variable.');
-      process.exit(1);
+      console.error('🔴 FATAL ERROR: MONGO_URI is not defined.');
+      console.error('🔴 Please ensure you have a .env file in the project root with the MONGO_URI variable.');
+      process.exit(1); // Exit the application immediately
     }
-    // The options object is no longer needed for modern Mongoose versions.
+    
+    // --- STEP 2: ATTEMPT CONNECTION ---
+    // Log a message indicating that the connection process is starting.
+    // For security, we sanitize the URI to hide the password in logs.
+    const sanitizedUri = process.env.MONGO_URI.replace(/:([^:]+)@/, ':****@');
+    console.log(`[DB] Attempting to connect to MongoDB...`);
+    // console.log(`[DB] URI: ${sanitizedUri}`); // Uncomment this line if you need to debug the URI path itself
+
+    // Use Mongoose to connect to the database. The `await` keyword will pause
+    // the function here until the connection is either successful or throws an error.
     await mongoose.connect(process.env.MONGO_URI);
-    console.log('MongoDB Connected...');
+
+    // --- STEP 3: HANDLE SUCCESS ---
+    // If the `await` command completes without error, the connection is successful.
+    console.log('✅ MongoDB Connected successfully!');
+
   } catch (err) {
-    console.error('MongoDB Connection Failed:', err.message); // Print a more specific error
-    // Exit process with failure
+    /*
+     * ==================================================================
+     * --- STEP 4: HANDLE FAILURE ---
+     * If mongoose.connect() fails for any reason (wrong password, IP not whitelisted,
+     * network issue, etc.), the `try` block is aborted, and this `catch` block runs.
+     * ==================================================================
+     */
+    console.error('🔴 FATAL ERROR: MongoDB connection failed!');
+    
+    // Log the specific, detailed error message provided by Mongoose.
+    // This is the most important clue for debugging.
+    console.error('🔴 Reason:', err.message);
+    
+    // Exit the entire application process with a "failure" code (1).
+    // This prevents the server from running in a broken state without a database.
     process.exit(1);
   }
 };
 
+// Export the function so it can be called from your main `server.js` file.
 module.exports = connectDB;

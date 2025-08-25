@@ -1,96 +1,98 @@
+// frontend/screens/VerifyRequestsScreen.tsx (or your file path)
+
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, RefreshControl, Linking, SafeAreaView } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-
-// Using the recommended path alias for robust imports.
-// Make sure your babel.config.js and tsconfig.json are set up for this.
 import { BACKEND_API_URL } from '@/config/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// This interface defines the structure of a Request object received from the backend.
-interface NgoRequest {
+interface RegistrationRequest {
     _id: string;
     requestId: string;
+    ngoName: string;
+    registrationId: string;
+    description: string;
+    contactNumber: string;
+    email: string;
     location: string;
-    contact: string;
+    documentPath?: string;
     dateOfRequest: string;
-    documentPath?: string; // The document is optional.
-    ngo_user: {
-        name: string; // The name of the NGO that sent the request.
-    } | null; // It could be null if the user was deleted.
 }
 
 export default function VerifyRequestsScreen() {
-    const router = useRouter();
-    const [requests, setRequests] = useState<NgoRequest[]>([]);
+    const [requests, setRequests] = useState<RegistrationRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    // This function connects to your backend to get the list of pending requests.
     const fetchData = useCallback(async (isRefreshing = false) => {
         if (!isRefreshing) setLoading(true);
         try {
             const token = await AsyncStorage.getItem('authToken');
             if (!token) {
-                // If the user is not logged in, send them to the login screen.
                 Alert.alert("Authentication Error", "Please log in again.");
-                router.replace('/(auth)/police-login');
                 return;
             }
-            // It calls the GET /api/requests/pending endpoint.
-            const response = await fetch(`${BACKEND_API_URL}/api/requests/pending`, {
+            const response = await fetch(`${BACKEND_API_URL}/api/requests/pending-registrations`, {
                 headers: { 'Authorization': `Bearer ${token}` },
             });
-            if (!response.ok) throw new Error('Failed to fetch requests from the server.');
+            if (!response.ok) throw new Error('Failed to fetch registration requests.');
             const data = await response.json();
             setRequests(data);
         } catch (error) {
-            Alert.alert('Error', 'Could not load pending requests.');
+            Alert.alert('Error', 'Could not load pending registration requests.');
         } finally {
             if (!isRefreshing) setLoading(false);
             setRefreshing(false);
         }
-    }, [router]);
+    }, []);
 
-    // This hook automatically re-runs `fetchData` every time the screen comes into focus.
     useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
     
-    // This function handles the pull-to-refresh action.
     const onRefresh = useCallback(() => { setRefreshing(true); fetchData(true); }, [fetchData]);
 
-    // This function handles the "Approve" and "Reject" button presses.
-    const handleUpdateRequest = (request: NgoRequest, newStatus: 'Approved' | 'Rejected') => {
-        Alert.alert(
-            `${newStatus} Request`,
-            `Are you sure you want to ${newStatus.toLowerCase()} request ${request.requestId}?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: newStatus,
-                    onPress: async () => {
-                        try {
-                            const token = await AsyncStorage.getItem('authToken');
-                            // It calls the PUT /api/requests/:id/status endpoint.
-                            const response = await fetch(`${BACKEND_API_URL}/api/requests/${request._id}/status`, {
-                                method: 'PUT',
-                                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ status: newStatus })
-                            });
-                            if (response.ok) {
-                                Alert.alert("Success", `Request has been ${newStatus.toLowerCase()}.`);
-                                onRefresh(); // Refresh the list to show the change.
-                            } else { throw new Error("Update failed"); }
-                        } catch (error) { Alert.alert("Error", `Could not update the request.`); }
-                    },
+    const handleUpdateRequest = (request: RegistrationRequest, action: 'approve' | 'reject') => {
+        const isApproving = action === 'approve';
+        const title = isApproving ? 'Approve Registration' : 'Reject Registration';
+        const message = `Are you sure you want to ${action} this request for '${request.ngoName}'?`;
+        const buttonText = isApproving ? 'Approve' : 'Reject';
+
+        Alert.alert(title, message, [
+            { text: "Cancel", style: "cancel" },
+            {
+                text: buttonText,
+                style: isApproving ? "default" : "destructive",
+                onPress: async () => {
+                    try {
+                        const token = await AsyncStorage.getItem('authToken');
+                        const endpoint = isApproving 
+                            ? `/api/requests/approve-registration/${request._id}` 
+                            : `/api/requests/reject-registration/${request._id}`;
+                        
+                        const response = await fetch(`${BACKEND_API_URL}${endpoint}`, {
+                            method: 'PUT',
+                            headers: { 'Authorization': `Bearer ${token}` },
+                        });
+
+                        const responseData = await response.json();
+                        if (response.ok) {
+                            Alert.alert("Success", responseData.msg);
+                            onRefresh();
+                        } else { 
+                            throw new Error(responseData.msg || "Update failed"); 
+                        }
+                    } catch (error) { 
+                        const errorMessage = error instanceof Error ? error.message : "Could not update the request.";
+                        Alert.alert("Error", errorMessage);
+                    }
                 },
-            ]
-        );
+            },
+        ]);
     };
 
     return (
         <SafeAreaView style={styles.pageContainer}>
-            <Text style={styles.headerTitle}>Verify Incoming Requests</Text>
+            <Text style={styles.headerTitle}>Verify NGO Registrations</Text>
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#850a0a"]} />}
@@ -98,33 +100,32 @@ export default function VerifyRequestsScreen() {
                 {loading && !refreshing ? (
                     <ActivityIndicator size="large" color="#850a0a" style={{ marginTop: 50 }} />
                 ) : requests.length === 0 ? (
-                    // This message is shown if the backend returns no pending requests.
                     <View style={styles.emptyContainer}>
                         <Ionicons name="shield-checkmark-outline" size={60} color="#A47171" />
-                        <Text style={styles.emptyText}>No pending requests to verify.</Text>
+                        <Text style={styles.emptyText}>No pending registrations to verify.</Text>
                     </View>
                 ) : (
-                    // This creates a card for each request sent by the NGOs.
                     requests.map(request => (
                         <View key={request._id} style={styles.card}>
                             <View style={styles.detailsContainer}>
                                 <Text style={styles.requestId}>{request.requestId}</Text>
-                                {/* DEFENSIVE CODING: This check prevents the app from crashing if ngo_user is null. */}
-                                <Text style={styles.detailText}>From: <Text style={styles.boldText}>{request.ngo_user ? request.ngo_user.name : 'Unknown User'}</Text></Text>
-                                <Text style={styles.detailText}>Location: <Text style={styles.boldText}>{request.location}</Text></Text>
-                                <Text style={styles.detailText}>Contact: <Text style={styles.boldText}>{request.contact}</Text></Text>
-                                <Text style={styles.detailText}>Date: {new Date(request.dateOfRequest).toLocaleDateString()}</Text>
+                                <Text style={styles.detailText}><Text style={styles.boldText}>NGO Name:</Text> {request.ngoName}</Text>
+                                <Text style={styles.detailText}><Text style={styles.boldText}>Reg. ID:</Text> {request.registrationId}</Text>
+                                <Text style={styles.detailText}><Text style={styles.boldText}>Email:</Text> {request.email}</Text>
+                                <Text style={styles.detailText}><Text style={styles.boldText}>Contact:</Text> {request.contactNumber}</Text>
+                                <Text style={styles.detailText}><Text style={styles.boldText}>Location:</Text> {request.location}</Text>
+                                <Text style={styles.detailText}><Text style={styles.boldText}>Date:</Text> {new Date(request.dateOfRequest).toLocaleDateString()}</Text>
                                 {request.documentPath && (
                                     <TouchableOpacity onPress={() => Linking.openURL(`${BACKEND_API_URL}/${request.documentPath}`)}>
-                                        <Text style={styles.linkText}>View Supporting Document</Text>
+                                        <Text style={styles.linkText}>View Registration Document</Text>
                                     </TouchableOpacity>
                                 )}
                             </View>
                             <View style={styles.actionsContainer}>
-                                <TouchableOpacity style={[styles.actionButton, styles.approveButton]} onPress={() => handleUpdateRequest(request, 'Approved')}>
+                                <TouchableOpacity style={[styles.actionButton, styles.approveButton]} onPress={() => handleUpdateRequest(request, 'approve')}>
                                     <Ionicons name="checkmark" size={20} color="white" />
                                 </TouchableOpacity>
-                                <TouchableOpacity style={[styles.actionButton, styles.rejectButton]} onPress={() => handleUpdateRequest(request, 'Rejected')}>
+                                <TouchableOpacity style={[styles.actionButton, styles.rejectButton]} onPress={() => handleUpdateRequest(request, 'reject')}>
                                     <Ionicons name="close" size={20} color="white" />
                                 </TouchableOpacity>
                             </View>
@@ -140,14 +141,14 @@ const styles = StyleSheet.create({
     pageContainer: { flex: 1, backgroundColor: '#FFFBF8' },
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#3A0000', textAlign: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F0E0E0' },
     scrollContent: { padding: 15, paddingBottom: 30 },
-    card: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 15, marginBottom: 15, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#F0E0E0', elevation: 2 },
+    card: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 15, marginBottom: 15, flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderColor: '#F0E0E0', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
     detailsContainer: { flex: 1 },
-    requestId: { fontSize: 18, fontWeight: 'bold', color: '#3A0000', marginBottom: 8 },
-    detailText: { fontSize: 14, color: '#5B4242', marginTop: 4, lineHeight: 20 },
-    boldText: { fontWeight: '600', color: '#3A0000' },
-    linkText: { fontSize: 14, color: '#007AFF', textDecorationLine: 'underline', marginTop: 8 },
-    actionsContainer: { justifyContent: 'space-around', marginLeft: 10 },
-    actionButton: { borderRadius: 20, padding: 10, marginVertical: 5 },
+    requestId: { fontSize: 18, fontWeight: 'bold', color: '#3A0000', marginBottom: 10 },
+    detailText: { fontSize: 14, color: '#5B4242', marginTop: 4, lineHeight: 22 },
+    boldText: { fontWeight: '700', color: '#3A0000' },
+    linkText: { fontSize: 14, color: '#007AFF', textDecorationLine: 'underline', marginTop: 12, fontWeight: '600' },
+    actionsContainer: { justifyContent: 'flex-start', marginLeft: 10 },
+    actionButton: { borderRadius: 20, padding: 10, marginVertical: 5, elevation: 2, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 3 },
     approveButton: { backgroundColor: '#28a745' },
     rejectButton: { backgroundColor: '#dc3545' },
     emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: '40%' },
