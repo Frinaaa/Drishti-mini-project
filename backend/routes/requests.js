@@ -1,3 +1,5 @@
+// backend/routes/requests.js
+
 const express = require('express');
 const router = express.Router();
 const fs = require('fs');
@@ -9,6 +11,12 @@ const { Request, User, Role } = require('../models');
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
+/*
+ * ==================================================================
+ * ROUTE: POST /api/requests/submit-for-registration
+ * (This route is correct, no changes needed)
+ * ==================================================================
+ */
 router.post('/submit-for-registration', async (req, res) => {
   try {
     const { ngoName, registrationId, description, contactNumber, email, location, password, documentData } = req.body;
@@ -47,6 +55,12 @@ router.post('/submit-for-registration', async (req, res) => {
   }
 });
 
+/*
+ * ==================================================================
+ * ROUTE: GET /api/requests/pending-registrations
+ * (This route is correct, no changes needed)
+ * ==================================================================
+ */
 router.get('/pending-registrations', async (req, res) => {
   try {
     const pendingRequests = await Request.find({ status: 'Pending Review' }).sort({ dateOfRequest: -1 });
@@ -57,6 +71,12 @@ router.get('/pending-registrations', async (req, res) => {
   }
 });
 
+/*
+ * ==================================================================
+ * ROUTE: PUT /api/requests/approve-registration/:id
+ * (This route is correct, no changes needed)
+ * ==================================================================
+ */
 router.put('/approve-registration/:id', async (req, res) => {
     try {
         const request = await Request.findById(req.params.id);
@@ -75,7 +95,7 @@ router.put('/approve-registration/:id', async (req, res) => {
             email: request.email,
             password: request.password, 
             role: ngoRole._id,
-            verification_status: 'Approved',
+            verification_status: 'Approved', // Set verification status for the new user
         });
         
         await user.save();
@@ -91,6 +111,12 @@ router.put('/approve-registration/:id', async (req, res) => {
     }
 });
 
+/*
+ * ==================================================================
+ * ROUTE: PUT /api/requests/reject-registration/:id (NEWLY ADDED)
+ * PURPOSE: Handles the rejection action from the frontend.
+ * ==================================================================
+ */
 router.put('/reject-registration/:id', async (req, res) => {
     try {
         const request = await Request.findById(req.params.id);

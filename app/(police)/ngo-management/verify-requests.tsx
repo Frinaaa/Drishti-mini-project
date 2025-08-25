@@ -1,3 +1,5 @@
+// frontend/screens/VerifyRequestsScreen.tsx (or your file path)
+
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, RefreshControl, Linking, SafeAreaView } from 'react-native';
 import { useFocusEffect } from 'expo-router';
