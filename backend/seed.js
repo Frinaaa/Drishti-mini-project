@@ -38,8 +38,7 @@ async function main() {
       name,
       email,
       password, // store plain text
-      role: policeRole._id,
-      is_verified: true
+      role: policeRole._id
     });
     console.log('Police admin user created successfully.');
   } catch (err) {

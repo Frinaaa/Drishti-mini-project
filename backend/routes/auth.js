@@ -57,7 +57,7 @@ router.post('/login', async (req, res) => {
         // This block now only checks if the user's status is 'Rejected'.
         // If the status is 'Pending' or 'Approved', they will be allowed to log in.
         if (user.role && user.role.role_name === 'NGO') {
-            if (user.verification_status === 'Rejected') {
+            if (user.status === 'Rejected') {
                 const message = 'Your registration has been rejected. Please contact support.';
                 return res.status(401).json({ msg: message });
             }
@@ -71,7 +71,7 @@ router.post('/login', async (req, res) => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
-                verification_status: user.verification_status // Include status in response
+                status: user.status // Include status in response
             }
         });
 

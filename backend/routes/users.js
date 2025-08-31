@@ -1,9 +1,41 @@
 const express = require('express');
 const router = express.Router();
-const bcrypt = require('bcryptjs'); // RE-ADDED: Essential for secure password handling
-const { User } = require('../models');
-// NOTE: You should also add an authentication middleware to protect these routes.
-// const auth = require('../middleware/auth');
+const { User, Role } = require('../models');
+
+/*
+ * ==================================================================
+ * NEW & IMPROVED ROUTE
+ * ROUTE: GET /api/users/ngos
+ * PURPOSE: Fetches all NGO users, with an optional status filter.
+ * USAGE: /api/users/ngos -> gets all NGOs
+ *        /api/users/ngos?status=Pending -> gets only pending NGOs
+ * ==================================================================
+ */
+router.get('/ngos', async (req, res) => {
+    try {
+        const { status } = req.query; // e.g., 'Pending', 'Approved', 'Rejected'
+
+        const ngoRole = await Role.findOne({ role_name: 'NGO' });
+        if (!ngoRole) {
+            return res.status(404).json({ msg: 'NGO role not found' });
+        }
+
+        // Base query to find all users with the NGO role
+        const query = { role: ngoRole._id };
+
+        // If a status is provided in the query parameters, add it to the filter
+        if (status) {
+            query.status = status;
+        }
+
+        const ngos = await User.find(query).select('-password').sort({ name: 1 });
+        res.json(ngos);
+
+    } catch (err) {
+        console.error("Error in /ngos:", err.message);
+        res.status(500).send('Server Error');
+    }
+});
 
 // @route   GET api/users/:id
 // @desc    Get user data by ID

@@ -15,12 +15,11 @@ const UserSchema = new Schema({
   password: { type: String, required: true },
   gender: { type: String },
   role: { type: Schema.Types.ObjectId, ref: 'Role', required: true },
-  is_verified: { type: Boolean, default: false }, // Can be used for general purposes
   // This field is the SINGLE SOURCE OF TRUTH for the NGO approval workflow.
-  verification_status: { 
+  status: { 
     type: String, 
-    enum: ['Pending', 'Approved', 'Rejected'], 
-    default: 'Approved' // Default is 'Approved' for roles like Family/Police that don't need this workflow.
+    enum: ['Pending', 'Approved', 'Rejected','Frozen'], 
+    default: 'Pending' // Default is 'Approved' for roles like Family/Police that don't need this workflow.
   }
 });
 
@@ -47,7 +46,7 @@ const RequestSchema = new Schema({
 
     // --- REMOVED ---
     // The status field has been removed to avoid redundancy.
-    // The User model's 'verification_status' is now the single source of truth.
+    // The User model's 'status' is now the single source of truth.
     /*
     status: { 
         type: String, 
