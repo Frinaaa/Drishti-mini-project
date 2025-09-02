@@ -1,113 +1,53 @@
+// backend/routes/auth.js
+
 const express = require('express');
 const router = express.Router();
 const { User, Role } = require('../models');
 
 // @route   POST api/auth/signup
-// @desc    Register a family member
-// @access  Public
 router.post('/signup', async (req, res) => {
   const { name, email, password } = req.body;
-
-  if (!name || !email || !password) {
-    return res.status(400).json({ msg: 'Please enter all fields' });
-  }
-
   try {
-    let user = await User.findOne({ email });
-    if (user) {
-      return res.status(400).json({ msg: 'User already exists' });
-    }
+    if (!name || !email || !password) return res.status(400).json({ msg: 'Please enter all fields' });
+    if (await User.findOne({ email })) return res.status(400).json({ msg: 'User already exists' });
 
     const familyRole = await Role.findOne({ role_name: 'Family' });
-    if (!familyRole) {
-        return res.status(500).json({ msg: 'Default user role not found. Please contact support.' });
-    }
+    if (!familyRole) return res.status(500).json({ msg: 'Default role not found.' });
 
-    user = new User({
-      name,
-      email,
-      password, // Storing password as plain text
-      role: familyRole._id,
-    });
-
-    await user.save();
+    const newUser = new User({ name, email, password, role: familyRole._id });
+    await newUser.save();
     res.status(201).json({ msg: 'User registered successfully' });
-
   } catch (err) {
-    console.error(err.message);
+    console.error("🔴 [Backend Error] /api/auth/signup:", err);
     res.status(500).send('Server Error');
   }
 });
 
-/*
- * ROUTE: POST api/auth/login (UPDATED)
- * PURPOSE: Authenticates users and now ONLY blocks NGOs that are 'Rejected'.
- */
+// @route   POST api/auth/login
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ msg: 'Please provide email and password' });
-
     try {
+        if (!email || !password) return res.status(400).json({ msg: 'Please provide email and password' });
+
         const user = await User.findOne({ email }).populate('role');
-        if (!user || password !== user.password) {
+        if (!user || password !== user.password) { // In a real app, use bcrypt to compare passwords
             return res.status(400).json({ msg: 'Invalid credentials' });
         }
         
-        // --- THE UPDATED SECURITY CHECK ---
-        // This block now only checks if the user's status is 'Rejected'.
-        // If the status is 'Pending' or 'Approved', they will be allowed to log in.
-        if (user.role && user.role.role_name === 'NGO') {
-            if (user.status === 'Rejected') {
-                const message = 'Your registration has been rejected. Please contact support.';
-                return res.status(401).json({ msg: message });
-            }
-        }
-
-        // If all checks pass, return user data
+        // Return all necessary user data, including role and status
         res.json({
             msg: 'Login successful',
+            token: 'fake-jwt-token', // Placeholder for a real JWT
             user: {
                 _id: user._id,
                 name: user.name,
                 email: user.email,
                 role: user.role,
-                status: user.status // Include status in response
+                status: user.status
             }
         });
-
     } catch (err) {
-        console.error("Error in /login:", err.message);
-        res.status(500).send('Server Error');
-    }
-});
-
-// @route   POST api/auth/reset-password
-// @desc    Reset user password
-// @access  Public
-router.post('/reset-password', async (req, res) => {
-    const { email, newPassword } = req.body;
-
-    if (!email || !newPassword) {
-        return res.status(400).json({ msg: 'Please provide email and a new password' });
-    }
-     if (newPassword.length < 6) {
-        return res.status(400).json({ msg: 'Password must be at least 6 characters long' });
-    }
-
-    try {
-        const user = await User.findOne({ email });
-        if (!user) {
-            return res.status(404).json({ msg: 'User not found' });
-        }
-
-        user.password = newPassword; // Storing new password as plain text
-        
-        await user.save();
-
-        res.json({ msg: 'Password has been reset successfully' });
-
-    } catch (err) {
-        console.error(err.message);
+        console.error("🔴 [Backend Error] /api/auth/login:", err);
         res.status(500).send('Server Error');
     }
 });
