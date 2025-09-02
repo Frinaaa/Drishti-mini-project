@@ -66,6 +66,10 @@ export default function NgoLoginScreen() {
       <Link href="./forgot-password" asChild replace>
         <Text style={styles.linkText}>Forgot Password?</Text>
       </Link>
+     <Link href="./submit-request" asChild>
+        <Text style={styles.linkText}>Don't have an account? Submit a request</Text>
+      </Link>
+      
     </View>
   );
 }
