@@ -1,48 +1,95 @@
 const express = require('express');
 const router = express.Router();
-const { User, Role } = require('../models'); 
+const { User, Role, Notification } = require('../models');
 
-// @route   POST api/ngo/register
-// @desc    Police registers a new NGO user
-// @access  Should be protected (police-only) in a real app
+/*
+ * ROUTE: POST /api/ngo/register (UPDATED: Now lives here)
+ * PURPOSE: Allows a new NGO to register.
+ */
 router.post('/register', async (req, res) => {
     const { ngoName, email, password, ngoId, address, contactNumber, location } = req.body;
-
     if (!ngoName || !email || !password) {
         return res.status(400).json({ msg: 'Please enter at least the NGO Name, Email, and Password.' });
     }
-
     try {
-        // 1. Check if an NGO with this email already exists
         let user = await User.findOne({ email });
-        if (user) {
-            return res.status(400).json({ msg: 'An account with this email already exists.' });
-        }
+        if (user) return res.status(400).json({ msg: 'An account with this email already exists.' });
 
-        // 2. Find the 'NGO' role from the database
         const ngoRole = await Role.findOne({ role_name: 'NGO' });
-        if (!ngoRole) {
-            // This is a server configuration error
-            return res.status(500).json({ msg: '"NGO" user role not found. Please contact an administrator.' });
-        }
+        if (!ngoRole) return res.status(500).json({ msg: '"NGO" user role not found. Please contact an administrator.' });
 
-        // 3. Create the new user object
         user = new User({
-            name: ngoName, // The User model's 'name' field will store the NGO name
+            name: ngoName,
             email,
-            password, // Storing password as plain text as per previous setup
+            password,
             role: ngoRole._id,
-            // Note: Other details like address, ngoId, etc., would need to be added to the UserSchema in models.js to be saved.
+            status: 'Pending', // New NGOs start as 'Pending'
+            // NOTE: Fields like ngoId, address, contactNumber, location
+            // are not part of UserSchema. If you want to store them,
+            // you must add them to UserSchema in models.js.
         });
-
-        // 4. Save the new user to the database
         await user.save();
-        res.status(201).json({ msg: `${ngoName} has been registered and can now log in.` });
-
+        res.status(201).json({ msg: `${ngoName} has been registered and is pending verification.` });
     } catch (err) {
-        console.error(err.message);
+        console.error("Error in /register:", err.message);
         res.status(500).send('Server Error');
     }
+});
+
+/*
+ * ROUTE: GET /api/ngo/all
+ * PURPOSE: Fetches all NGO users regardless of their verification status.
+ * This is the primary data source for the police management screen.
+ */
+router.get('/all', async (req, res) => {
+    try {
+        const ngoRole = await Role.findOne({ role_name: 'NGO' });
+        if (!ngoRole) return res.status(404).json({ msg: 'NGO role not found' });
+
+        const allNgos = await User.find({ role: ngoRole._id }).select('-password').sort({ name: 1 });
+        res.json(allNgos);
+    } catch (err) {
+        console.error("Error in /all:", err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+/*
+ * ROUTE: PUT /api/ngo/update-status/:id (UPDATED: Handles 'Approved', 'Rejected', 'Frozen')
+ * PURPOSE: For police to change an NGO's status and send a notification.
+ */
+router.put('/update-status/:id', async (req, res) => {
+  const { status } = req.body; // Expects "Approved", "Rejected", or "Frozen"
+  if (!['Approved', 'Rejected', 'Frozen'].includes(status)) {
+    return res.status(400).json({ msg: 'Invalid status provided.' });
+  }
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ msg: 'NGO user not found' });
+
+    user.status = status; // Update the user's status
+    await user.save();
+
+    // --- Create Notification for the NGO ---
+    let notificationMessage = '';
+    if (status === 'Approved') {
+      notificationMessage = `Congratulations, ${user.name}! Your account has been verified. You can now log in and access all features.`;
+    } else if (status === 'Rejected') {
+      notificationMessage = `We regret to inform you that your registration for ${user.name} has been rejected. Please contact support.`;
+    } else if (status === 'Frozen') {
+      notificationMessage = `Attention, ${user.name}! Your NGO account has been temporarily frozen due to reported malpractices. Please contact support immediately.`;
+    }
+
+    if (notificationMessage) {
+      const newNotification = new Notification({ recipient: user._id, message: notificationMessage });
+      await newNotification.save();
+    }
+
+    res.json({ msg: `NGO has been successfully ${status.toLowerCase()}.` });
+  } catch (err) {
+    console.error("Error in /update-status:", err.message);
+    res.status(500).send('Server Error');
+  }
 });
 
 module.exports = router;
