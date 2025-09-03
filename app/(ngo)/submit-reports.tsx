@@ -22,7 +22,8 @@ export default function SubmitReportScreen() {
     const [description, setDescription] = useState('');
     const [relation, setRelation] = useState('');
     const [contactNumber, setContactNumber] = useState('');
-    const [photoUri, setPhotoUri] = useState<string | null>(null);
+    const [photoUri, setPhotoUri] = useState<string | null>(null); // For local preview
+    const [uploadedFileName, setUploadedFileName] = useState<string | null>(null); // To store filename from backend
     
     const [loading, setLoading] = useState(false);
     
@@ -30,7 +31,7 @@ export default function SubmitReportScreen() {
     const [isGenderPickerVisible, setGenderPickerVisible] = useState(false);
     const [isRelationPickerVisible, setRelationPickerVisible] = useState(false);
 
-    // --- ADDED: Function to clear all form fields after submission ---
+    // Function to clear all form fields after submission
     const resetForm = () => {
         setPersonName('');
         setAge('');
@@ -41,6 +42,7 @@ export default function SubmitReportScreen() {
         setRelation('');
         setContactNumber('');
         setPhotoUri(null);
+        setUploadedFileName(null); // Reset uploaded file name
     };
 
     const handleImagePick = async () => {
@@ -55,23 +57,68 @@ export default function SubmitReportScreen() {
             aspect: [1, 1],
             quality: 0.5,
         });
+        
         if (!result.canceled) {
-            setPhotoUri(result.assets[0].uri);
+            const localUri = result.assets[0].uri;
+            setPhotoUri(localUri); // Show local preview
+
+            // --- START OF CHANGES (Image Upload Logic) ---
+            setLoading(true); // Indicate loading while uploading image
+            try {
+                const filename = localUri.split('/').pop();
+                const match = /\.(\w+)$/.exec(filename);
+                const type = match ? `image/${match[1]}` : `image`;
+
+                const formData = new FormData();
+                formData.append('file', { uri: localUri, name: filename, type });
+
+                const uploadResponse = await fetch(`${BACKEND_API_URL}/api/upload`, { // Assuming you create this /api/upload endpoint
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    },
+                });
+
+                if (uploadResponse.ok) {
+                    const uploadData = await uploadResponse.json();
+                    // Assuming your backend sends back the filename or relative path
+                    // e.g., { filePath: "image_12345.jpg" } or { filePath: "/uploads/image_12345.jpg" }
+                    setUploadedFileName(uploadData.filePath); // Store the filename/path
+                    Alert.alert('Success', 'Image uploaded successfully!');
+                } else {
+                    const errorData = await uploadResponse.json();
+                    Alert.alert('Upload Failed', errorData.msg || 'An error occurred during image upload.');
+                    setPhotoUri(null); // Clear preview if upload fails
+                    setUploadedFileName(null);
+                }
+            } catch (uploadError) {
+                console.error('Image upload error:', uploadError);
+                Alert.alert('Network Error', 'Could not connect to the server to upload image.');
+                setPhotoUri(null); // Clear preview if network fails
+                setUploadedFileName(null);
+            } finally {
+                setLoading(false); // End loading for image upload
+            }
+            // --- END OF CHANGES (Image Upload Logic) ---
         }
     };
 
     const handleSubmit = async () => {
-        if (!personName || !age || !gender || !lastSeenLocation || !relation || !contactNumber || !photoUri) {
+        // --- UPDATED VALIDATION ---
+        if (!personName || !age || !gender || !lastSeenLocation || !relation || !contactNumber || !uploadedFileName) {
             return Alert.alert('Missing Information', 'Please fill out all fields and upload a photo.');
         }
-        setLoading(true);
+        setLoading(true); // Indicate loading for report submission
         try {
             const userId = await AsyncStorage.getItem('userId');
             if (!userId) {
                 setLoading(false);
                 return Alert.alert('Authentication Error', 'You must be logged in to submit a report.');
             }
-            const photo_url = 'https://example.com/path/to/uploaded/image.jpg'; // This should be replaced with actual image upload logic
+            
+            // --- Use the uploadedFileName from the state ---
+            const photo_url_to_save = uploadedFileName; 
 
             const reportData = {
                 user: userId,
@@ -82,17 +129,16 @@ export default function SubmitReportScreen() {
                 description: description,
                 relationToReporter: relation,
                 reporterContact: contactNumber,
-                photo_url: photo_url,
+                photo_url: photo_url_to_save, // Now sending the filename/relative path
             };
 
             const response = await fetch(`${BACKEND_API_URL}/api/reports`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json' }, // No 'multipart/form-data' header here
                 body: JSON.stringify(reportData),
             });
 
             if (response.ok) {
-                // --- UPDATED: Alert now simply dismisses, then the form is reset ---
                 Alert.alert(
                     'Report Submitted',
                     'The missing person report has been successfully submitted.',
@@ -107,7 +153,7 @@ export default function SubmitReportScreen() {
             console.error('Report submission error:', error);
             Alert.alert('Connection Error', 'Could not connect to the server to submit the report.');
         } finally {
-            setLoading(false);
+            setLoading(false); // End loading for report submission
         }
     };
 
@@ -117,7 +163,6 @@ export default function SubmitReportScreen() {
                 options={{ 
                     title: 'Report Missing Person', 
                     headerShown: true,
-                    // --- START OF CHANGES ---
                     headerLeft: () => (
                         <TouchableOpacity 
                             onPress={() => router.replace('/(ngo)/ngo-dashboard')} 
@@ -126,7 +171,6 @@ export default function SubmitReportScreen() {
                             <Ionicons name="arrow-back" size={24} color="#3A0000" />
                         </TouchableOpacity>
                     ),
-                    // --- END OF CHANGES ---
                 }} 
             />
             <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
@@ -191,11 +235,11 @@ export default function SubmitReportScreen() {
                 <TextInput style={styles.input} value={contactNumber} onChangeText={setContactNumber} placeholder="Enter your contact number" keyboardType="phone-pad" placeholderTextColor="#b94e4e" />
                 
                 <Text style={styles.label}>Upload a Clear Photo of the Missing Person</Text>
-                <TouchableOpacity style={styles.imagePicker} onPress={handleImagePick}>
+                <TouchableOpacity style={styles.imagePicker} onPress={handleImagePick} disabled={loading}> {/* Disable while uploading */}
                     {photoUri ? (
                         <Image source={{ uri: photoUri }} style={styles.imagePreview} />
                     ) : (
-                        <Text style={styles.imagePickerText}>Tap to upload photo</Text>
+                        loading ? <ActivityIndicator size="small" color="#3A0000" /> : <Text style={styles.imagePickerText}>Tap to upload photo</Text>
                     )}
                 </TouchableOpacity>
                 <Text style={styles.subLabel}>Photo is essential for AI-powered face matching.</Text>
@@ -203,7 +247,7 @@ export default function SubmitReportScreen() {
                 <CustomButton 
                     title={loading ? 'Submitting...' : 'Submit Report'} 
                     onPress={handleSubmit} 
-                    disabled={loading} 
+                    disabled={loading || !uploadedFileName} // Disable if still loading image or no image uploaded
                     style={{ marginTop: 20 }}
                 />
             </ScrollView>
