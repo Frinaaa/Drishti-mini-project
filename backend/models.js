@@ -52,9 +52,50 @@ const NotificationSchema = new Schema({
   created_at: { type: Date, default: Date.now }
 });
 
+const MissingReportSchema = new Schema({
+  // The family member who filed the report
+  user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  person_name: { type: String, required: true },
+  gender: { type: String, enum: ['Male', 'Female', 'Other'], required: true },
+  age: { type: Number, required: true },
+  last_seen: { type: String, required: true },
+
+  // ADDED: The new report fields from code2
+  description: { type: String },
+  relationToReporter: { type: String },
+  reporterContact: { type: String },
+
+  photo_url: { type: String },
+  status: { type: String, default: 'Pending', required: true },
+  reported_at: { type: Date, default: Date.now }
+});
+
+// UploadedPhoto Schema
+const UploadedPhotoSchema = new Schema({
+  // The user (e.g., NGO) who uploaded the photo
+  uploader: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  location: { type: String, required: true },
+  image_url: { type: String, required: true },
+  uploaded_at: { type: Date, default: Date.now }
+});
+const AlertsSchema = new Schema({
+  // The user (Police/Family) who receives the alert
+  recipient: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  // The photo that triggered the alert
+  uploaded_photo: { type: Schema.Types.ObjectId, ref: 'UploadedPhoto', required: true },
+  // The missing person report it matches
+  missing_report: { type: Schema.Types.ObjectId, ref: 'MissingReport', required: true },
+  is_verified: { type: Boolean, default: false },
+  comments: { type: String },
+  alert_time: { type: Date, default: Date.now }
+});
+
 module.exports = {
   Role: mongoose.model('Role', RoleSchema),
   User: mongoose.model('User', UserSchema),
   Request: mongoose.model('Request', RequestSchema),
   Notification: mongoose.model('Notification', NotificationSchema),
+  MissingReport: mongoose.model('MissingReport', MissingReportSchema),
+  UploadedPhoto: mongoose.model('UploadedPhoto', UploadedPhotoSchema),
+  Alert: mongoose.model('Alert', AlertsSchema)
 };
