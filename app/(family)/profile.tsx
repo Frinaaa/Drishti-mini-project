@@ -12,7 +12,7 @@ export default function ProfileScreen() {
     const router = useRouter();
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [profileImageUri, setProfileImageUri] = useState(null);
+    const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
     const [isLanguagePickerVisible, setLanguagePickerVisible] = useState(false);
     const [selectedLanguage, setSelectedLanguage] = useState('English');
     // REMOVED: The isSupportPickerVisible state has been deleted.
@@ -107,7 +107,7 @@ export default function ProfileScreen() {
 
                 {/* REMOVED: The entire "Contact Support" dropdown View block has been deleted. */}
 
-                <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/aboutUs')}>
+                <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/(family)/aboutUs')}>
                     <View style={styles.settingIconContainer}><Ionicons name="information-circle-outline" size={22} color="#3A0000" /></View>
                     <Text style={styles.settingLabel}>About Drishti</Text>
                     <Ionicons name="chevron-forward-outline" size={20} color="#A47171" />
