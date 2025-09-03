@@ -71,7 +71,7 @@ export default function SubmitReportScreen() {
                 setLoading(false);
                 return Alert.alert('Authentication Error', 'You must be logged in to submit a report.');
             }
-            const photo_url = 'https://example.com/path/to/uploaded/image.jpg';
+            const photo_url = 'https://example.com/path/to/uploaded/image.jpg'; // This should be replaced with actual image upload logic
 
             const reportData = {
                 user: userId,
@@ -113,7 +113,22 @@ export default function SubmitReportScreen() {
 
     return (
         <>
-            <Stack.Screen options={{ title: 'Report Missing Person', headerShown: true }} />
+            <Stack.Screen 
+                options={{ 
+                    title: 'Report Missing Person', 
+                    headerShown: true,
+                    // --- START OF CHANGES ---
+                    headerLeft: () => (
+                        <TouchableOpacity 
+                            onPress={() => router.replace('/(ngo)/ngo-dashboard')} 
+                            style={{ marginLeft: 10 }}
+                        >
+                            <Ionicons name="arrow-back" size={24} color="#3A0000" />
+                        </TouchableOpacity>
+                    ),
+                    // --- END OF CHANGES ---
+                }} 
+            />
             <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
                 <Text style={styles.label}>Full Name of Missing Person</Text>
                 <TextInput style={styles.input} value={personName} onChangeText={setPersonName} placeholder="Enter full name" placeholderTextColor="#b94e4e" />

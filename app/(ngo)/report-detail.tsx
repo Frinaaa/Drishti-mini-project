@@ -14,6 +14,7 @@ export default function ReportDetailScreen() {
         const fetchReport = async () => {
             if (!reportId) return;
             try {
+                // Ensure to use report.photo_url here when fetching for the detail image
                 const response = await fetch(`${BACKEND_API_URL}/api/reports/${reportId}`);
                 const data = await response.json();
                 if (response.ok) {
@@ -42,7 +43,13 @@ export default function ReportDetailScreen() {
         <>
             <Stack.Screen options={{ title: 'Report Details', headerShown: true }} />
             <ScrollView style={styles.container}>
-                <Image source={require('@/assets/images/story1.png')} style={styles.reportImage} />
+                {/* --- START OF CHANGES --- */}
+                {/* Use the actual report photo URL if available, otherwise fallback */}
+                <Image 
+                    source={report.photo_url ? { uri: report.photo_url } : require('@/assets/images/story1.png')} 
+                    style={styles.reportImage} 
+                />
+                {/* --- END OF CHANGES --- */}
                 <View style={styles.content}>
                     <Text style={styles.name}>{report.person_name}, {report.age}</Text>
                     <Text style={styles.status}>Status: {report.status}</Text>
@@ -65,7 +72,7 @@ export default function ReportDetailScreen() {
 
                     <View style={styles.actionContainer}>
                         <CustomButton title="Verify Report" onPress={() => Alert.alert("Verify", "Mark this report as verified?")} />
-                        <CustomButton title="Contact Family" onPress={() => Alert.alert("Contact", `Contacting ${report.user?.name}...`)} style={{backgroundColor: '#17a2b8'}} />
+                        {/* Removed the "Contact Family" button */}
                         <CustomButton title="Reject Report" onPress={() => Alert.alert("Reject", "Are you sure you want to reject this report?")} style={{backgroundColor: '#dc3545'}} />
                     </View>
                 </View>

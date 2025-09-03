@@ -12,7 +12,7 @@ export default function RecentUploadsScreen() {
 
     const fetchReports = async () => {
         try {
-            const response = await fetch(`${BACKEND_API_URL}/api/reports/family`);
+            const response = await fetch(`${BACKEND_API_URL}/api/reports`); 
             const data = await response.json();
             if (response.ok) {
                 setReports(data);
@@ -20,6 +20,7 @@ export default function RecentUploadsScreen() {
                 throw new Error('Failed to fetch reports');
             }
         } catch (error) {
+            console.error("Failed to fetch reports:", error);
             Alert.alert('Error', 'Could not load recent uploads.');
         } finally {
             setLoading(false);
@@ -45,10 +46,10 @@ export default function RecentUploadsScreen() {
 
     return (
         <>
-            <Stack.Screen options={{ title: 'Recent Family Uploads', headerShown: true }} />
+            <Stack.Screen options={{ title: 'Recent Missing Person Reports', headerShown: true }} />
             <ScrollView 
                 style={styles.container}
-                contentContainerStyle={{ flexGrow: 1 }} // This ensures the "empty" view can be centered vertically
+                contentContainerStyle={{ flexGrow: 1 }}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             >
                 {reports.length > 0 ? (
@@ -58,11 +59,19 @@ export default function RecentUploadsScreen() {
                             style={styles.reportCard}
                             onPress={() => router.push({ pathname: '/(ngo)/report-detail', params: { reportId: report._id } })}
                         >
-                            <Image source={require('@/assets/images/story1.png')} style={styles.reportImage} />
+                            <Image 
+                                source={report.photo_url ? { uri: report.photo_url } : require('@/assets/images/story1.png')} 
+                                style={styles.reportImage} 
+                            />
                             <View style={styles.reportDetails}>
                                 <Text style={styles.reportName}>{report.person_name}, {report.age}</Text>
                                 <Text style={styles.detailText}>Status: {report.status}</Text>
-                                <Text style={styles.detailText}>Reported by: {report.user.name}</Text>
+                                {/* --- START OF CHANGES --- */}
+                                {/* Conditionally render 'Reported by' or provide a fallback */}
+                                <Text style={styles.detailText}>
+                                    Reported by: {report.user ? report.user.name : 'Unknown'}
+                                </Text>
+                                {/* --- END OF CHANGES --- */}
                                 <Text style={styles.detailText}>Submitted: {new Date(report.reported_at).toLocaleDateString()}</Text>
                             </View>
                         </TouchableOpacity>
@@ -70,7 +79,7 @@ export default function RecentUploadsScreen() {
                 ) : (
                     <View style={styles.centered}>
                         <Ionicons name="cloud-offline-outline" size={60} color="#A47171" />
-                        <Text style={styles.emptyText}>No new family reports at this time.</Text>
+                        <Text style={styles.emptyText}>No recent reports at this time.</Text>
                     </View>
                 )}
             </ScrollView>
