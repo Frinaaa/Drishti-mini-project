@@ -65,6 +65,13 @@ export default function FamilyTabLayout() {
 
          }} 
         />
+         {/* --- THIS IS THE NEWLY ADDED BLOCK THAT FIXES THE PROBLEM --- */}
+      <Tabs.Screen
+        name="aboutUs" // This must match your filename: aboutUs.tsx
+        options={{
+          href: null, // This is the magic property that hides the tab
+        }}
+        />
         <Tabs.Screen
         name="privacy-settings" 
         options={{ 
