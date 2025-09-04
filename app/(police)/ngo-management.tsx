@@ -15,7 +15,6 @@ const getBackendUrl = () => {
   return DEFAULT_BACKEND;
 };
 
-// Confirmation state handled via inline modal
 
 // Types
 interface NgoApplication {
@@ -82,7 +81,6 @@ export default function NgoManagementScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedApplication, setSelectedApplication] = useState<NgoApplication | null>(null);
-  const [confirmState, setConfirmState] = useState<{ visible: boolean; action: 'Approve' | 'Reject' | 'Freeze' | 'Unfreeze' | null; application: NgoApplication | null }>({ visible: false, action: null, application: null });
 
   const baseUrl = getBackendUrl();
 
@@ -101,7 +99,17 @@ export default function NgoManagementScreen() {
       const resp = await fetch(endpoint, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
       console.log('[NgoManagement] GET status', resp.status);
       if (!resp.ok) throw new Error(`Failed to fetch (${resp.status})`);
-      const data = await resp.json();
+
+      let data;
+      const contentType = resp.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await resp.json();
+      } else {
+        const textResponse = await resp.text();
+        console.log('[NgoManagement] non-JSON response from fetchData:', textResponse.substring(0, 200));
+        throw new Error(`Server returned non-JSON response (${resp.status}): ${textResponse.substring(0, 100)}...`);
+      }
+
       console.log('[NgoManagement] applications count', Array.isArray(data) ? data.length : 'n/a');
       setAllApplications(data);
     } catch (err: any) {
@@ -135,11 +143,6 @@ export default function NgoManagementScreen() {
     setFilteredApplications(result);
   }, [activeFilter, allApplications]);
 
-  // prepare and show confirmation modal
-  const handleUpdateStatus = (application: NgoApplication, action: 'Approve' | 'Reject' | 'Freeze' | 'Unfreeze') => {
-    console.log('[NgoManagement] request action (show confirm)', action, application._id);
-    setConfirmState({ visible: true, action, application });
-  };
 
   // perform the network call for an action
   const performUpdate = async (application: NgoApplication, action: 'Approve' | 'Reject' | 'Freeze' | 'Unfreeze') => {
@@ -157,12 +160,25 @@ export default function NgoManagementScreen() {
       console.log('[NgoManagement] calling', endpoint);
       const resp = await fetch(endpoint, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
       console.log('[NgoManagement] action response status', resp.status);
-      const data = await resp.json();
+
+      let data;
+      const contentType = resp.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await resp.json();
+      } else {
+        // Handle non-JSON responses (like HTML error pages)
+        const textResponse = await resp.text();
+        console.log('[NgoManagement] non-JSON response:', textResponse.substring(0, 200));
+        if (!resp.ok) {
+          throw new Error(`Server error (${resp.status}): ${textResponse.substring(0, 100)}...`);
+        }
+        data = { msg: 'Action completed successfully' };
+      }
+
       console.log('[NgoManagement] action response data', data);
       if (!resp.ok) throw new Error(data?.msg || `Failed (${resp.status})`);
       Alert.alert('Success', data.msg || 'Action completed');
-      // close both modals
-      setConfirmState({ visible: false, action: null, application: null });
+      // close modal and refresh
       setIsModalVisible(false);
       setSelectedApplication(null);
       onRefresh();
@@ -240,11 +256,11 @@ export default function NgoManagementScreen() {
                 <View style={styles.modalActionsContainer}>
                   {selectedApplication.status === 'Pending' && (
                     <>
-                      <TouchableOpacity style={[styles.actionButton, styles.approveButton]} onPress={() => { console.log('[NgoManagement] Approve pressed', selectedApplication?._id); if (selectedApplication) handleUpdateStatus(selectedApplication, 'Approve'); }}>
+                      <TouchableOpacity style={[styles.actionButton, styles.approveButton]} onPress={() => { console.log('[NgoManagement] Approve pressed', selectedApplication?._id); if (selectedApplication) performUpdate(selectedApplication, 'Approve'); }}>
                         <Ionicons name="checkmark-circle-outline" size={22} color="white" />
                         <Text style={styles.actionButtonText}>Approve</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={[styles.actionButton, styles.rejectButton]} onPress={() => { console.log('[NgoManagement] Reject pressed', selectedApplication?._id); if (selectedApplication) handleUpdateStatus(selectedApplication, 'Reject'); }}>
+                      <TouchableOpacity style={[styles.actionButton, styles.rejectButton]} onPress={() => { console.log('[NgoManagement] Reject pressed', selectedApplication?._id); if (selectedApplication) performUpdate(selectedApplication, 'Reject'); }}>
                         <Ionicons name="close-circle-outline" size={22} color="white" />
                         <Text style={styles.actionButtonText}>Reject</Text>
                       </TouchableOpacity>
@@ -252,14 +268,14 @@ export default function NgoManagementScreen() {
                   )}
 
                   {selectedApplication.status === 'Approved' && selectedApplication.approvedUser?.status === 'Active' && (
-                    <TouchableOpacity style={[styles.actionButton, styles.freezeButton]} onPress={() => { console.log('[NgoManagement] Freeze pressed', selectedApplication._id); handleUpdateStatus(selectedApplication, 'Freeze'); }}>
+                    <TouchableOpacity style={[styles.actionButton, styles.freezeButton]} onPress={() => { console.log('[NgoManagement] Freeze pressed', selectedApplication._id); performUpdate(selectedApplication, 'Freeze'); }}>
                       <Ionicons name="snow-outline" size={22} color="white" />
                       <Text style={styles.actionButtonText}>Freeze Account</Text>
                     </TouchableOpacity>
                   )}
 
                   {selectedApplication.status === 'Approved' && selectedApplication.approvedUser?.status === 'Frozen' && (
-                    <TouchableOpacity style={[styles.actionButton, styles.unfreezeButton]} onPress={() => { console.log('[NgoManagement] Unfreeze pressed', selectedApplication._id); handleUpdateStatus(selectedApplication, 'Unfreeze'); }}>
+                    <TouchableOpacity style={[styles.actionButton, styles.unfreezeButton]} onPress={() => { console.log('[NgoManagement] Unfreeze pressed', selectedApplication._id); performUpdate(selectedApplication, 'Unfreeze'); }}>
                       <Ionicons name="reload-outline" size={22} color="white" />
                       <Text style={styles.actionButtonText}>Unfreeze Account</Text>
                     </TouchableOpacity>
@@ -272,25 +288,6 @@ export default function NgoManagementScreen() {
         </Modal>
       )}
 
-      {/* Inline confirmation modal */}
-      {confirmState.visible && confirmState.application && (
-        <Modal transparent animationType="fade" visible={confirmState.visible} onRequestClose={() => setConfirmState({ visible: false, action: null, application: null })}>
-          <View style={styles.confirmBackdrop}>
-            <View style={styles.confirmBox}>
-              <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 12 }}>Confirm {confirmState.action}</Text>
-              <Text style={{ marginBottom: 18 }}>{`Are you sure you want to ${confirmState.action?.toLowerCase()} ${confirmState.application?.ngoName}?`}</Text>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <TouchableOpacity style={[styles.actionButton, { flex: 1, marginRight: 8, backgroundColor: '#6c757d' }]} onPress={() => setConfirmState({ visible: false, action: null, application: null })}>
-                  <Text style={styles.actionButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionButton, { flex: 1 } , confirmState.action === 'Approve' ? styles.approveButton : confirmState.action === 'Reject' ? styles.rejectButton : styles.freezeButton]} onPress={() => { performUpdate(confirmState.application as NgoApplication, confirmState.action as any); }}>
-                  <Text style={styles.actionButtonText}>Confirm</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-      )}
 
     </SafeAreaView>
   );
@@ -328,6 +325,4 @@ const styles = StyleSheet.create({
   rejectButton: { backgroundColor: '#dc3545' },
   freezeButton: { backgroundColor: '#007bff' },
   unfreezeButton: { backgroundColor: '#6c757d' },
-  confirmBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  confirmBox: { width: '80%', backgroundColor: 'white', padding: 18, borderRadius: 12, elevation: 6 },
 });
