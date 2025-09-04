@@ -7,14 +7,13 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_API_URL } from '../../config/api';
 
-// Data for the dropdowns
+// Data for the dropdowns (Family version)
 const genderOptions = ['Male', 'Female', 'Other'];
 const relationOptions = ['Parent', 'Sibling', 'Spouse', 'Child', 'Friend', 'Other Relative'];
 
 export default function SubmitReportScreen() {
     const router = useRouter();
     
-    // State for all form fields
     const [personName, setPersonName] = useState('');
     const [age, setAge] = useState('');
     const [gender, setGender] = useState('');
@@ -24,30 +23,14 @@ export default function SubmitReportScreen() {
     const [relation, setRelation] = useState('');
     const [contactNumber, setContactNumber] = useState('');
     const [photoUri, setPhotoUri] = useState<string | null>(null);
-    
     const [loading, setLoading] = useState(false);
-    
-    // State for dropdown visibility
     const [isGenderPickerVisible, setGenderPickerVisible] = useState(false);
     const [isRelationPickerVisible, setRelationPickerVisible] = useState(false);
-
-    // --- ADDED: Function to clear all form fields after submission ---
-    const resetForm = () => {
-        setPersonName('');
-        setAge('');
-        setGender('');
-        setLastSeenLocation('');
-        setLastSeenDateTime('');
-        setDescription('');
-        setRelation('');
-        setContactNumber('');
-        setPhotoUri(null);
-    };
 
     const handleImagePick = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-            Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to make this work!');
+            Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions!');
             return;
         }
         let result = await ImagePicker.launchImageLibraryAsync({
@@ -72,41 +55,44 @@ export default function SubmitReportScreen() {
                 setLoading(false);
                 return Alert.alert('Error', 'You must be logged in to submit a report.');
             }
-            const photo_url = 'https://example.com/path/to/uploaded/image.jpg';
+            
+            const formData = new FormData();
+            formData.append('user', userId);
+            formData.append('person_name', personName);
+            formData.append('age', age);
+            formData.append('gender', gender);
+            formData.append('last_seen', `${lastSeenLocation} at ${lastSeenDateTime}`);
+            formData.append('description', description);
+            formData.append('relationToReporter', relation);
+            formData.append('reporterContact', contactNumber);
 
-            const reportData = {
-                user: userId,
-                person_name: personName,
-                age: Number(age),
-                gender: gender,
-                last_seen: `${lastSeenLocation} at ${lastSeenDateTime}`,
-                description: description,
-                relationToReporter: relation,
-                reporterContact: contactNumber,
-                photo_url: photo_url,
-            };
+            const filename = photoUri.split('/').pop() || 'photo.jpg';
+            const fileType = filename.endsWith('.png') ? 'image/png' : 'image/jpeg';
+            
+            formData.append('photo', {
+                uri: photoUri,
+                name: filename,
+                type: fileType,
+            } as any);
 
             const response = await fetch(`${BACKEND_API_URL}/api/reports`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(reportData),
+                body: formData,
             });
 
             if (response.ok) {
-                // --- UPDATED: Alert now simply dismisses, then the form is reset ---
                 Alert.alert(
                     'Report Submitted', 
                     'Your report has been received and will be reviewed by verified NGOs.',
-                    [{ text: 'OK' }]
+                    [{ text: 'OK', onPress: () => router.replace('/(family)/family-dashboard') }]
                 );
-                resetForm(); // This will clear the form for a new entry
             } else {
                 const errorData = await response.json();
                 Alert.alert('Submission Failed', errorData.msg || 'An error occurred.');
             }
         } catch (error) {
             console.error('Report submission error:', error);
-            Alert.alert('Connection Error', 'Could not submit the report. Please check your network and try again.');
+            Alert.alert('Connection Error', 'Could not connect to the server to submit the report.');
         } finally {
             setLoading(false);
         }
@@ -125,22 +111,9 @@ export default function SubmitReportScreen() {
                 <Text style={styles.label}>Gender</Text>
                 <View>
                     <TouchableOpacity style={styles.input} onPress={() => { setGenderPickerVisible(!isGenderPickerVisible); setRelationPickerVisible(false); }}>
-                        <View style={styles.dropdownHeader}>
-                            <Text style={[styles.dropdownHeaderText, !gender && styles.placeholderText]}>
-                                {gender || 'Select gender'}
-                            </Text>
-                            <Ionicons name={isGenderPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" />
-                        </View>
+                        <View style={styles.dropdownHeader}><Text style={[styles.dropdownHeaderText, !gender && styles.placeholderText]}>{gender || 'Select gender'}</Text><Ionicons name={isGenderPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" /></View>
                     </TouchableOpacity>
-                    {isGenderPickerVisible && (
-                        <View style={styles.dropdown}>
-                            {genderOptions.map(option => (
-                                <TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { setGender(option); setGenderPickerVisible(false); }}>
-                                    <Text style={styles.dropdownText}>{option}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    )}
+                    {isGenderPickerVisible && ( <View style={styles.dropdown}>{genderOptions.map(option => ( <TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { setGender(option); setGenderPickerVisible(false); }}><Text style={styles.dropdownText}>{option}</Text></TouchableOpacity>))}</View> )}
                 </View>
                 
                 <Text style={styles.label}>Last Seen Location</Text>
@@ -155,22 +128,9 @@ export default function SubmitReportScreen() {
                 <Text style={styles.label}>Relation to Missing Person</Text>
                 <View>
                     <TouchableOpacity style={styles.input} onPress={() => { setRelationPickerVisible(!isRelationPickerVisible); setGenderPickerVisible(false); }}>
-                        <View style={styles.dropdownHeader}>
-                            <Text style={[styles.dropdownHeaderText, !relation && styles.placeholderText]}>
-                                {relation || 'Select your relationship'}
-                            </Text>
-                            <Ionicons name={isRelationPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" />
-                        </View>
+                        <View style={styles.dropdownHeader}><Text style={[styles.dropdownHeaderText, !relation && styles.placeholderText]}>{relation || 'Select your relationship'}</Text><Ionicons name={isRelationPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" /></View>
                     </TouchableOpacity>
-                    {isRelationPickerVisible && (
-                        <View style={styles.dropdown}>
-                            {relationOptions.map(option => (
-                                <TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { setRelation(option); setRelationPickerVisible(false); }}>
-                                    <Text style={styles.dropdownText}>{option}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    )}
+                    {isRelationPickerVisible && ( <View style={styles.dropdown}>{relationOptions.map(option => ( <TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { setRelation(option); setRelationPickerVisible(false); }}><Text style={styles.dropdownText}>{option}</Text></TouchableOpacity>))}</View> )}
                 </View>
 
                 <Text style={styles.label}>Your Contact Number</Text>
@@ -178,11 +138,7 @@ export default function SubmitReportScreen() {
                 
                 <Text style={styles.label}>Upload a Clear Photo of the Missing Person</Text>
                 <TouchableOpacity style={styles.imagePicker} onPress={handleImagePick}>
-                    {photoUri ? (
-                        <Image source={{ uri: photoUri }} style={styles.imagePreview} />
-                    ) : (
-                        <Text style={styles.imagePickerText}>Tap to upload photo</Text>
-                    )}
+                    {photoUri ? ( <Image source={{ uri: photoUri }} style={styles.imagePreview} /> ) : ( <Text style={styles.imagePickerText}>Tap to upload photo</Text> )}
                 </TouchableOpacity>
                 <Text style={styles.subLabel}>Photo is essential for AI-powered face matching.</Text>
 
@@ -207,31 +163,10 @@ const styles = StyleSheet.create({
     imagePicker: { height: 120, borderRadius: 12, borderWidth: 2, borderColor: '#E4C4C4', borderStyle: 'dashed', backgroundColor: 'rgba(245, 234, 234, 0.5)', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
     imagePickerText: { fontSize: 16, color: '#5B4242', fontWeight: '500' },
     imagePreview: { width: '100%', height: '100%', borderRadius: 10 },
-    dropdownHeader: { 
-        flexDirection: 'row', 
-        justifyContent: 'space-between', 
-        alignItems: 'center' 
-    },
-    dropdownHeaderText: { 
-        fontSize: 16,
-        color: '#3A0000'
-    },
-    placeholderText: {
-        color: '#b94e4e'
-    },
-    dropdown: { 
-        backgroundColor: '#FFFFFF', 
-        borderRadius: 8, 
-        borderWidth: 1, 
-        borderColor: '#E4C4C4', 
-        marginTop: -15,
-    },
-    dropdownItem: { 
-        padding: 14, 
-        borderBottomWidth: 1, 
-        borderBottomColor: '#F0E0E0' 
-    },
-    dropdownText: { 
-        fontSize: 16 
-    },
+    dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    dropdownHeaderText: { fontSize: 16, color: '#3A0000' },
+    placeholderText: { color: '#b94e4e' },
+    dropdown: { backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 1, borderColor: '#E4C4C4', marginTop: -15, },
+    dropdownItem: { padding: 14, borderBottomWidth: 1, borderBottomColor: '#F0E0E0' },
+    dropdownText: { fontSize: 16 },
 });

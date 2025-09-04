@@ -147,6 +147,8 @@ router.put('/freeze-user/:requestId', async (req, res) =>{
 });
 
 // IMPORTANT: Make sure your /submit-for-registration route is included in this file
+// [-] REMOVED DUPLICATE ROUTE DEFINITION:
+/*
 router.post('/submit-for-registration', async (req, res) =>  {
   try {
     const { ngoName, registrationId, description, contactNumber, email, location, password, documentData } = req.body;
@@ -175,7 +177,7 @@ router.post('/submit-for-registration', async (req, res) =>  {
     res.status(500).send('Server Error');
   }
 });
-
+*/
 
 
 module.exports = router;
