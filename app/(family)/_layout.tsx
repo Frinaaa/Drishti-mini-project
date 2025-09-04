@@ -1,14 +1,24 @@
+// app/(family)/_layout.tsx
+
 import React from 'react';
 import { Tabs } from 'expo-router';
 import TabBarIcon from '../../components/TabBarIcon';
-import CustomHeader from '../../components/CustomHeader'; // Import the new header
+import CustomHeader from '../../components/CustomHeader';
 
 export default function FamilyTabLayout() {
   return (
     <Tabs
+      // --- THIS IS THE CRITICAL FIX ---
+      // This prop tells the navigator to remember the last active tab (e.g., Profile)
+      // when you navigate back, instead of resetting to the first tab (Dashboard).
+      backBehavior="history"
+
+      // Your existing screenOptions are correct.
       screenOptions={{
-        // Use the custom header for ALL tabs in this layout
-        header: (props) => <CustomHeader title={props.options.title!} showLogout />,
+        header: (props) => {
+          const showBackButton = ['notifications', 'edit-profile', 'privacy-settings', 'aboutUs', 'submit-report'].includes(props.route.name);
+          return <CustomHeader title={props.options.title || 'Dashboard'} showLogout showBackButton={showBackButton} />;
+        },
         tabBarActiveTintColor: '#850a0a',
         tabBarInactiveTintColor: '#A47171',
         tabBarStyle: {
@@ -23,6 +33,9 @@ export default function FamilyTabLayout() {
         },
       }}
     >
+      {/* The rest of this file remains exactly as you had it. */}
+      {/* No other changes are needed here. */}
+      
       <Tabs.Screen
         name="family-dashboard"
         options={{
@@ -44,40 +57,40 @@ export default function FamilyTabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="person-outline" color={color} />,
         }}
       />
-       {/* --- These screens are NOT tabs. They are screens that can be navigated to from within the Profile tab. --- */}
-      {/* By defining them here with href: null, we tell the Tabs navigator they exist but shouldn't be a bottom tab. */}
       <Tabs.Screen
         name="edit-profile"
         options={{
+          title: 'Edit Profile',
           href: null,
         }}
       />
       <Tabs.Screen
         name="notifications"
         options={{
+          title: 'Notifications',
           href: null,
         }}
       />
       <Tabs.Screen
-        name="submit-report" 
-        options={{ 
-          href: null
-
-         }} 
-        />
-         {/* --- THIS IS THE NEWLY ADDED BLOCK THAT FIXES THE PROBLEM --- */}
-      <Tabs.Screen
-        name="aboutUs" // This must match your filename: aboutUs.tsx
+        name="submit-report"
         options={{
-          href: null, // This is the magic property that hides the tab
+          title: 'Submit Report',
+          href: null
         }}
         />
-        <Tabs.Screen
-        name="privacy-settings" 
-        options={{ 
+      <Tabs.Screen
+        name="aboutUs"
+        options={{
+          title: 'About Us',
+          href: null,
+        }}
+        />
+      <Tabs.Screen
+        name="privacy-settings"
+        options={{
+          title: 'Privacy Settings',
           href: null
-
-         }} 
+        }}
         />
     </Tabs>
   );
