@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Alert, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, Alert, Image, TouchableOpacity, Platform } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import CustomButton from '../../components/CustomButton';
 import * as ImagePicker from 'expo-image-picker';
@@ -41,6 +41,7 @@ export default function SubmitReportScreen() {
         });
         if (!result.canceled) {
             setPhotoUri(result.assets[0].uri);
+            console.log("[Frontend] Image picked, URI:", result.assets[0].uri); // Log the picked URI
         }
     };
 
@@ -49,6 +50,8 @@ export default function SubmitReportScreen() {
             return Alert.alert('Missing Information', 'Please fill out all fields and upload a photo.');
         }
         setLoading(true);
+        console.log("--- SUBMITTING REPORT (Frontend) ---");
+
         try {
             const userId = await AsyncStorage.getItem('userId');
             if (!userId) {
@@ -56,7 +59,28 @@ export default function SubmitReportScreen() {
                 return Alert.alert('Authentication Error', 'You must be logged in to submit a report.');
             }
 
+            // Create the form data
             const formData = new FormData();
+
+            // First, handle the photo - this should be first to ensure it's properly attached
+            if (photoUri) {
+                // Get the file extension
+                const extension = photoUri.split('.').pop()?.toLowerCase() || 'jpg';
+                const fileName = `photo_${Date.now()}.${extension}`;
+                
+                // Create the file object
+                const photoFile = {
+                    uri: Platform.OS === 'ios' ? photoUri.replace('file://', '') : photoUri,
+                    type: `image/${extension === 'png' ? 'png' : 'jpeg'}`,
+                    name: fileName,
+                };
+
+                // Append the photo first
+                formData.append('photo', photoFile);
+                console.log("[Frontend] Photo being uploaded:", photoFile);
+            }
+
+            // Append other form fields
             formData.append('user', userId);
             formData.append('person_name', personName);
             formData.append('age', age);
@@ -66,33 +90,33 @@ export default function SubmitReportScreen() {
             formData.append('relationToReporter', relation);
             formData.append('reporterContact', contactNumber);
 
-            const filename = photoUri.split('/').pop() || 'photo.jpg';
-            const fileType = filename.endsWith('.png') ? 'image/png' : 'image/jpeg';
-            
-            formData.append('photo', {
-                uri: photoUri,
-                name: filename,
-                type: fileType,
-            } as any);
+            console.log("[Frontend] Sending request to:", `${BACKEND_API_URL}/api/reports`);
 
             const response = await fetch(`${BACKEND_API_URL}/api/reports`, {
                 method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    // Note: Don't set Content-Type header, it's automatically set by FormData
+                },
                 body: formData,
             });
+
+            const data = await response.json();
+            console.log("[Frontend] Response status:", response.status);
+            console.log("[Frontend] Response data:", data);
 
             if (response.ok) {
                 Alert.alert(
                     'Report Submitted',
-                    'The missing person report has been successfully submitted.',
+                    data.msg || 'The missing person report has been successfully submitted.',
                     [{ text: 'OK', onPress: () => router.replace('/(ngo)/ngo-dashboard') }]
                 );
             } else {
-                const errorData = await response.json();
-                Alert.alert('Submission Failed', errorData.msg || 'An error occurred.');
+                throw new Error(data.msg || 'Failed to submit report');
             }
         } catch (error) {
-            console.error('Report submission error:', error);
-            Alert.alert('Connection Error', 'Could not connect to the server.');
+            console.error('🔴 Frontend caught error during report submission:', error);
+            Alert.alert('Submission Error', error.message || 'Could not submit the report. Please try again.');
         } finally {
             setLoading(false);
         }

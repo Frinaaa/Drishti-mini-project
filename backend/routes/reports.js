@@ -2,13 +2,12 @@
 
 const express = require('express');
 const router = express.Router();
-const multer = require('multer'); // ADD THIS LINE
-const path = require('path');   // ADD THIS LINE
-const fs = require('fs');       // ADD THIS LINE
-const { MissingReport, Role, User } = require('../models'); 
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { MissingReport, Role, User } = require('../models');
 
 // --- MULTER CONFIGURATION FOR IMAGE UPLOADS ---
-// This tells multer where to save the files and what to name them.
 const reportUploadsDir = path.join(__dirname, '..', 'uploads', 'reports');
 if (!fs.existsSync(reportUploadsDir)) {
     fs.mkdirSync(reportUploadsDir, { recursive: true });
@@ -19,49 +18,81 @@ const storage = multer.diskStorage({
         cb(null, reportUploadsDir);
     },
     filename: function (req, file, cb) {
-        // Create a unique filename to prevent files with the same name from overwriting each other
         cb(null, Date.now() + '-' + file.originalname.replace(/\s/g, '_'));
     }
 });
 
-const upload = multer({ storage: storage });
-// --- END OF MULTER CONFIGURATION ---
+// Configure Multer to handle potential errors and filter file types
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // Limit file size to 5MB (adjust as needed)
+    fileFilter: (req, file, cb) => {
+        // Log the file MIME type to debug
+        console.log(`[Multer] Received file MIME type: ${file.mimetype}`);
+        if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/png' || file.mimetype === 'image/jpg') {
+            cb(null, true); // Accept file
+        } else {
+            cb(new Error('Invalid file type, only JPEG, JPG and PNG are allowed!'), false); // Reject file
+        }
+    }
+}).single('photo'); // Expect a single file with field name 'photo'
 
 
 // @route   POST api/reports
 // @desc    Submit a new missing person report with an image
-// --- THIS IS THE CRITICAL CHANGE: We add `upload.single('photo')` middleware ---
-router.post('/', upload.single('photo'), async (req, res) => {
-    // With multer, text fields from FormData are in req.body
-    const { user, person_name, gender, age, last_seen, description, relationToReporter, reporterContact } = req.body;
-    
-    // The uploaded file information is now in `req.file`
-    if (!req.file) {
-        return res.status(400).json({ msg: 'Photo is required.' });
-    }
+router.post('/', (req, res) => {
+    // Wrap the Multer upload process in this route to catch Multer-specific errors
+    upload(req, res, async (err) => {
+        // --- Multer Error Handling ---
+        if (err instanceof multer.MulterError) {
+            console.error('🔴 Multer Error (Type: MulterError):', err.message);
+            console.error('Details:', err); // Log the full error object
+            return res.status(400).json({ msg: `File upload error: ${err.message}` });
+        } else if (err) {
+            console.error('🔴 Multer Error (Unknown/FileFilter Error):', err.message);
+            console.error('Details:', err); // Log the full error object
+            return res.status(400).json({ msg: `Upload error: ${err.message}` });
+        }
 
-    if (!user || !person_name || !gender || !age || !last_seen) {
-        return res.status(400).json({ msg: 'Please provide all required text fields.' });
-    }
-    try {
-        // Construct the publicly accessible URL path for the saved image
-        const photo_url = `uploads/reports/${req.file.filename}`;
+        // --- Post-Multer Processing & Validation ---
+        console.log(`[Backend] Request received for /api/reports`);
+        console.log(`[Backend] req.body:`, req.body);
+        console.log(`[Backend] req.file:`, req.file);
 
-        const newReport = new MissingReport({
-            user, person_name, gender, age, last_seen,
-            description, relationToReporter, reporterContact,
-            photo_url: photo_url, // Save the actual file path
-            status: 'Pending Verification',
-        });
-        await newReport.save();
-        res.status(201).json({ msg: 'Report submitted successfully', report: newReport });
-    } catch (err) {
-        console.error('Error submitting report:', err.message);
-        res.status(500).json({ 
-            msg: 'A server error occurred while saving the report.',
-            error: err.message
-        });
-    }
+        const { user, person_name, gender, age, last_seen, description, relationToReporter, reporterContact } = req.body;
+        
+        if (!req.file) {
+            console.error('🔴 Validation Error: Photo is missing from the request.');
+            return res.status(400).json({ msg: 'Photo is required.' });
+        }
+
+        // Backend validation for text fields - make sure they are ALL present
+        if (!user || !person_name || !gender || !age || !last_seen || !relationToReporter || !reporterContact) {
+            console.error('🔴 Validation Error: Missing required text fields.');
+            console.error('Received fields:', { user, person_name, gender, age, last_seen, description, relationToReporter, reporterContact });
+            return res.status(400).json({ msg: 'Please provide all required text fields.' });
+        }
+
+        try {
+            const photo_url = `uploads/reports/${req.file.filename}`;
+
+            const newReport = new MissingReport({
+                user, person_name, gender, age, last_seen,
+                description, relationToReporter, reporterContact,
+                photo_url: photo_url,
+                status: 'Pending Verification',
+            });
+            await newReport.save();
+            console.log('✅ Report submitted successfully for:', person_name);
+            res.status(201).json({ msg: 'Report submitted successfully', report: newReport });
+        } catch (dbErr) {
+            console.error('🔴 Database Error (saving report):', dbErr.message);
+            res.status(500).json({ 
+                msg: 'A server error occurred while saving the report.',
+                error: dbErr.message
+            });
+        }
+    });
 });
 
 

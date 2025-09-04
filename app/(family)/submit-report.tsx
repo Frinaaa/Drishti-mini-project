@@ -77,6 +77,8 @@ export default function SubmitReportScreen() {
 
             const response = await fetch(`${BACKEND_API_URL}/api/reports`, {
                 method: 'POST',
+                // [-] REMOVE THIS LINE: When sending FormData, the Content-Type header is set automatically.
+                // headers: { 'Content-Type': 'application/json' },
                 body: formData,
             });
 
