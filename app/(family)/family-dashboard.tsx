@@ -117,9 +117,7 @@ export default function FamilyDashboardScreen() {
             <Text style={styles.submitButtonText}>Submit Report</Text>
           </TouchableOpacity>
         
-          <TouchableOpacity style={styles.statusButton} onPress={() => router.push('/(family)/status')}>
-            <Text style={styles.statusButtonText}>View Status</Text>
-          </TouchableOpacity>
+          
         </View>
         
         <Image source={require('@/assets/images/familyillustration.png')} style={styles.mainImage} />

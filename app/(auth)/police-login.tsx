@@ -1,11 +1,10 @@
+// app/(auth)/police-login.tsx
+
 import { Link, useRouter } from 'expo-router';
-// THIS IS THE CORRECTED LINE
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import CustomButton from '../../components/CustomButton';
-// ADDED: Import AsyncStorage to save the login token
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// It's better to use the path alias if you have it set up
 import { BACKEND_API_URL } from '../../config/api';
 
 export default function PoliceLoginScreen() {
@@ -16,41 +15,40 @@ export default function PoliceLoginScreen() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      return Alert.alert('Error', 'Please enter your ID and password.');
+      return Alert.alert('Error', 'Please enter your email and password.');
     }
     setLoading(true);
 
     try {
-       const response = await fetch(`${BACKEND_API_URL}/api/auth/login`, {
+      const response = await fetch(`${BACKEND_API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // IMPORTANT: Ensure your backend expects the 'role' field for police login
-        body: JSON.stringify({ email, password, role: 'Police' }),
+        
+        // --- THIS IS THE CRITICAL FIX ---
+        // The login request should ONLY send the email and password.
+        // The server is responsible for determining the user's role.
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
+        // After a successful login, we check the role that the SERVER sent back to us.
         if (data.user?.role?.role_name === 'Police') {
 
-          /*
-           * ==================================================================
-           * THIS IS THE CRITICAL FIX
-           * Before navigating, we MUST save the authentication token and user ID
-           * that the server sent back.
-           * ==================================================================
-           */
+          // Save the token and user ID for future requests
           await AsyncStorage.setItem('authToken', data.token);
           await AsyncStorage.setItem('userId', data.user._id);
 
           Alert.alert('Success', 'Logged in successfully!');
-          // Now that the token is saved, we can safely navigate to the dashboard.
           router.replace({ pathname: '/(police)/police-dashboard', params: { officerName: data.user.name } });
 
         } else {
-          Alert.alert('Login Failed', 'This login is for Police Officers only.');
+          // This will now correctly catch Family or NGO members trying to log in here.
+          Alert.alert('Access Denied', 'This login portal is for Police Officers only.');
         }
       } else {
+         // This handles backend errors like "Invalid credentials"
          Alert.alert('Login Failed', data.msg || 'Invalid credentials.');
       }
     } catch (error) {
@@ -88,7 +86,7 @@ export default function PoliceLoginScreen() {
         <CustomButton title="Login" onPress={handleLogin} />
       )}
       
-      <Link href="./forgot-password" asChild replace>
+      <Link href="./forgot-password" asChild>
         <Text style={styles.linkText}>Forgot Password?</Text>
       </Link>
     </View>
