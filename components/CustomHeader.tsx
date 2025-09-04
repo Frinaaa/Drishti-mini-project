@@ -6,9 +6,10 @@ import { Ionicons } from '@expo/vector-icons';
 interface CustomHeaderProps {
   title: string;
   showLogout?: boolean;
+  showBackButton?: boolean;
 }
 
-export default function CustomHeader({ title, showLogout = false }: CustomHeaderProps) {
+export default function CustomHeader({ title, showLogout = false, showBackButton = true }: CustomHeaderProps) {
   const router = useRouter();
   const navigation = useNavigation();
 
@@ -21,7 +22,7 @@ export default function CustomHeader({ title, showLogout = false }: CustomHeader
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.left}>
-          {navigation.canGoBack() && (
+          {showBackButton && navigation.canGoBack() && (
             <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
               <Ionicons name="arrow-back" size={24} color="#2B0000" />
             </TouchableOpacity>
