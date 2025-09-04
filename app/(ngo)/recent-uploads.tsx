@@ -60,18 +60,17 @@ export default function RecentUploadsScreen() {
                             onPress={() => router.push({ pathname: '/(ngo)/report-detail', params: { reportId: report._id } })}
                         >
                             <Image 
-                                source={report.photo_url ? { uri: report.photo_url } : require('@/assets/images/story1.png')} 
+                                // [+] CONSTRUCT FULL IMAGE URL: Prepend BACKEND_API_URL
+                                source={report.photo_url ? { uri: `${BACKEND_API_URL}/${report.photo_url}` } : require('@/assets/images/story1.png')} 
                                 style={styles.reportImage} 
                             />
                             <View style={styles.reportDetails}>
                                 <Text style={styles.reportName}>{report.person_name}, {report.age}</Text>
                                 <Text style={styles.detailText}>Status: {report.status}</Text>
-                                {/* --- START OF CHANGES --- */}
                                 {/* Conditionally render 'Reported by' or provide a fallback */}
                                 <Text style={styles.detailText}>
                                     Reported by: {report.user ? report.user.name : 'Unknown'}
                                 </Text>
-                                {/* --- END OF CHANGES --- */}
                                 <Text style={styles.detailText}>Submitted: {new Date(report.reported_at).toLocaleDateString()}</Text>
                             </View>
                         </TouchableOpacity>

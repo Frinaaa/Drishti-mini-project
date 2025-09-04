@@ -42,13 +42,11 @@ export default function ReportDetailScreen() {
         <>
             <Stack.Screen options={{ title: 'Report Details', headerShown: true }} />
             <ScrollView style={styles.container}>
-                {/* --- START OF CHANGES --- */}
-                {/* Use report.photo_url for the image source, with a fallback */}
+                {/* [+] CONSTRUCT FULL IMAGE URL: Use report.photo_url for the image source, with a fallback */}
                 <Image 
-                    source={report.photo_url ? { uri: report.photo_url } : require('@/assets/images/story1.png')} 
+                    source={report.photo_url ? { uri: `${BACKEND_API_URL}/${report.photo_url}` } : require('@/assets/images/story1.png')} 
                     style={styles.reportImage} 
                 />
-                {/* --- END OF CHANGES --- */}
                 <View style={styles.content}>
                     <Text style={styles.name}>{report.person_name}, {report.age}</Text>
                     <Text style={styles.status}>Status: {report.status}</Text>
