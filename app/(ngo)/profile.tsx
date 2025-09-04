@@ -5,51 +5,51 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_API_URL } from '../../config/api';
 
-// --- UPDATED: "Notifications" has been removed from the settings list ---
 const settingsItems = [
-  { icon: 'briefcase-outline', label: 'My Assignments', screen: '/(ngo)/my-assignments' },
-  { icon: 'toggle-outline', label: 'Set Availability' },
-  { icon: 'information-circle-outline', label: 'About Drishti', screen: '/aboutUs' },
+    { icon: 'briefcase-outline', label: 'My Assignments', screen: '/(ngo)/my-assignments' },
+    { icon: 'toggle-outline', label: 'Set Availability' },
+    { icon: 'information-circle-outline', label: 'About Drishti', screen: '/aboutUs' },
 ];
 
 export default function NgoProfileScreen() {
     const router = useRouter();
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [profileImageUri, setProfileImageUri] = useState(null); // Add state for profile image
+    const [profileImageUri, setProfileImageUri] = useState(null);
 
     useFocusEffect(
-      useCallback(() => {
-        const loadData = async () => {
-          setLoading(true);
-          try {
-            const userId = await AsyncStorage.getItem('userId');
-            // Load saved profile image
-            const savedImageUri = await AsyncStorage.getItem('profileImageUri');
-            setProfileImageUri(savedImageUri);
+        useCallback(() => {
+            const loadData = async () => {
+                setLoading(true);
+                try {
+                    const userId = await AsyncStorage.getItem('userId');
 
-            if (!userId) {
-              router.replace('/(auth)/ngo-login');
-              return;
-            }
-            const response = await fetch(`${BACKEND_API_URL}/api/users/${userId}`);
-            const data = await response.json();
-            if (response.ok) {
-              setUser(data.user);
-            } else {
-              Alert.alert('Error', 'Could not fetch user data.');
-            }
-          } catch (error) {
-            Alert.alert('Connection Error', 'Could not connect to the server.');
-          } finally {
-            setLoading(false);
-          }
-        };
-        loadData();
-      }, [])
+                    if (!userId) {
+                        router.replace('/(auth)/ngo-login');
+                        return;
+                    }
+                    const response = await fetch(`${BACKEND_API_URL}/api/users/${userId}`);
+                    const data = await response.json();
+                    if (response.ok) {
+                        setUser(data.user);
+                        if (data.user.profile_photo) {
+                            setProfileImageUri(`${BACKEND_API_URL}${data.user.profile_photo}`);
+                        } else {
+                            setProfileImageUri(null);
+                        }
+                    } else {
+                        Alert.alert('Error', 'Could not fetch user data.');
+                    }
+                } catch (error) {
+                    Alert.alert('Connection Error', 'Could not connect to the server.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+            loadData();
+        }, [])
     );
-    
-    // UPDATED: Clear profile image on logout
+
     const handleLogout = async () => {
         await AsyncStorage.removeItem('userId');
         await AsyncStorage.removeItem('profileImageUri');
@@ -57,11 +57,11 @@ export default function NgoProfileScreen() {
     };
 
     const handleSettingPress = (item) => {
-      if (item.screen) {
-        router.push(item.screen);
-      } else {
-        Alert.alert('Coming Soon', `${item.label} feature is under development.`);
-      }
+        if (item.screen) {
+            router.push(item.screen);
+        } else {
+            Alert.alert('Coming Soon', `${item.label} feature is under development.`);
+        }
     };
 
     if (loading) {
@@ -71,22 +71,17 @@ export default function NgoProfileScreen() {
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
             <View style={styles.profileHeader}>
-                <Image 
-                    // Use the state for the profile image source
+                <Image
                     source={profileImageUri ? { uri: profileImageUri } : require('@/assets/images/jahana.png')}
-                    style={styles.avatar} 
+                    style={styles.avatar}
                 />
                 <Text style={styles.name}>{user?.name || 'NGO Volunteer'}</Text>
                 <Text style={styles.role}>NGO Volunteer</Text>
-                {/* 
-                  FIXED: The button is no longer disabled while the user data is loading.
-                  The `user &&` check in onPress handles the case where data isn't ready yet.
-                */}
-                <TouchableOpacity 
-                    style={styles.editButton} 
+                <TouchableOpacity
+                    style={styles.editButton}
                     onPress={() => {
                         if (user) {
-                            router.push({ pathname: '/(ngo)/edit-profile', params: { ...user } })
+                            router.push({ pathname: '/(ngo)/edit-profile', params: { ...user, profile_photo: user.profile_photo ? `${BACKEND_API_URL}${user.profile_photo}` : null } })
                         } else {
                             Alert.alert("Please wait", "User data is still loading.")
                         }
@@ -114,9 +109,9 @@ export default function NgoProfileScreen() {
             </TouchableOpacity>
         </ScrollView>
     );
+
 }
 
-// Styles remain the same
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFBF8', },
     scrollContent: { padding: 20, paddingBottom: 80, },

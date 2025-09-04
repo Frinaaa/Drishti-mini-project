@@ -6,7 +6,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_API_URL } from '../../config/api';
 
 const languages = ['English', 'Spanish', 'Hindi', 'French'];
-// REMOVED: The supportContacts array has been deleted.
 
 export default function ProfileScreen() {
     const router = useRouter();
@@ -15,41 +14,44 @@ export default function ProfileScreen() {
     const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
     const [isLanguagePickerVisible, setLanguagePickerVisible] = useState(false);
     const [selectedLanguage, setSelectedLanguage] = useState('English');
-    // REMOVED: The isSupportPickerVisible state has been deleted.
 
     useFocusEffect(
-      useCallback(() => {
-        const loadData = async () => {
-          setLoading(true);
-          try {
-            const userId = await AsyncStorage.getItem('userId');
-            const savedImageUri = await AsyncStorage.getItem('profileImageUri');
-            setProfileImageUri(savedImageUri);
+        useCallback(() => {
+            const loadData = async () => {
+                setLoading(true);
+                try {
+                    const userId = await AsyncStorage.getItem('userId');
 
-            if (!userId) {
-              router.replace('/(auth)/family-login');
-              return;
-            }
-            const response = await fetch(`${BACKEND_API_URL}/api/users/${userId}`);
-            const data = await response.json();
-            if (response.ok) {
-              setUser(data.user);
-            } else {
-              Alert.alert('Error', 'Could not fetch user data.');
-            }
-          } catch (error) {
-            Alert.alert('Connection Error', 'Could not connect to the server.');
-          } finally {
-            setLoading(false);
-          }
-        };
-        loadData();
-      }, [])
+                    if (!userId) {
+                        router.replace('/(auth)/family-login');
+                        return;
+                    }
+                    const response = await fetch(`${BACKEND_API_URL}/api/users/${userId}`);
+                    const data = await response.json();
+                    if (response.ok) {
+                        setUser(data.user);
+                        // NEW: Set profile image from user data, construct full URL
+                        if (data.user.profile_photo) {
+                            setProfileImageUri(`${BACKEND_API_URL}${data.user.profile_photo}`);
+                        } else {
+                            setProfileImageUri(null); // No custom photo, use default
+                        }
+                    } else {
+                        Alert.alert('Error', 'Could not fetch user data.');
+                    }
+                } catch (error) {
+                    Alert.alert('Connection Error', 'Could not connect to the server.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+            loadData();
+        }, [])
     );
-    
+
     const handleLogout = async () => {
         await AsyncStorage.removeItem('userId');
-        await AsyncStorage.removeItem('profileImageUri');
+        await AsyncStorage.removeItem('profileImageUri'); // Still remove local URI if it exists
         router.replace('/');
     };
 
@@ -60,27 +62,26 @@ export default function ProfileScreen() {
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
             <View style={styles.profileHeader}>
-                <Image 
+                <Image
                     source={profileImageUri ? { uri: profileImageUri } : require('@/assets/images/frina.png')}
-                    style={styles.avatar} 
+                    style={styles.avatar}
                 />
                 <Text style={styles.name}>{user?.name || 'Family Member'}</Text>
                 <Text style={styles.role}>Family Member</Text>
-                <TouchableOpacity style={styles.editButton} onPress={() => user && router.push({ pathname: '/(family)/edit-profile', params: { ...user } })}>
+                <TouchableOpacity style={styles.editButton} onPress={() => user && router.push({ pathname: '/(family)/edit-profile', params: { ...user, profile_photo: user.profile_photo ? `${BACKEND_API_URL}${user.profile_photo}` : null } })}>
                     <Text style={styles.editButtonText}>Edit Profile</Text>
                 </TouchableOpacity>
             </View>
 
             <View style={styles.settingsContainer}>
                 <Text style={styles.settingsTitle}>Settings</Text>
-                
+
                 <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/(family)/notifications')}>
                     <View style={styles.settingIconContainer}><Ionicons name="notifications-outline" size={22} color="#3A0000" /></View>
                     <Text style={styles.settingLabel}>Notifications</Text>
                     <Ionicons name="chevron-forward-outline" size={20} color="#A47171" />
                 </TouchableOpacity>
-                
-                {/* UPDATED: onPress now navigates to the new screen */}
+
                 <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/(family)/privacy-settings')}>
                     <View style={styles.settingIconContainer}><Ionicons name="lock-closed-outline" size={22} color="#3A0000" /></View>
                     <Text style={styles.settingLabel}>Privacy Settings</Text>
@@ -105,8 +106,6 @@ export default function ProfileScreen() {
                     )}
                 </View>
 
-                {/* REMOVED: The entire "Contact Support" dropdown View block has been deleted. */}
-
                 <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/(family)/aboutUs')}>
                     <View style={styles.settingIconContainer}><Ionicons name="information-circle-outline" size={22} color="#3A0000" /></View>
                     <Text style={styles.settingLabel}>About Drishti</Text>
@@ -119,9 +118,9 @@ export default function ProfileScreen() {
             </TouchableOpacity>
         </ScrollView>
     );
+
 }
 
-// Styles remain the same as before
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFBF8', },
     scrollContent: { padding: 20, paddingBottom: 80, },

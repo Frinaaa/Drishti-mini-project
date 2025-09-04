@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { Request, User, Role, Notification } = require('../models');
 
-const UPLOADS_DIR = path.join(__dirname, '..', 'uploads'); // eslint-disable-line no-undef
+const UPLOADS_DIR = path.join(__dirname, '..', 'uploads','request'); // eslint-disable-line no-undef
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 // --- NGO APPLICATION SUBMISSION ---
@@ -31,7 +31,7 @@ router.post('/submit-for-registration', async (req, res) => {
     const uniqueFilename = `${Date.now()}-${documentData.fileName}`;
     const filePath = path.join(UPLOADS_DIR, uniqueFilename);
     fs.writeFileSync(filePath, fileBuffer);
-    const documentPath = `uploads/${uniqueFilename}`;
+    const documentPath = `uploads/request/${uniqueFilename}`;
 
     const lastRequest = await Request.findOne().sort({ dateOfRequest: -1 });
     const nextId = lastRequest ? parseInt(lastRequest.requestId.split('-')[1]) + 1 : 1001;

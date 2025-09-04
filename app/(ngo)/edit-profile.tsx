@@ -9,33 +9,26 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function EditProfileScreen() {
     const router = useRouter();
-    const user = useLocalSearchParams(); 
-    
+    const user = useLocalSearchParams();
+
     const [name, setName] = useState(user.name ?? '');
     const [email, setEmail] = useState(user.email ?? '');
-    const [profileImage, setProfileImage] = useState(null);
+    const [profileImage, setProfileImage] = useState(user.profile_photo ?? null); // Initial state from route params
     const [gender, setGender] = useState(user.gender || 'Not specified');
     const [isGenderPickerVisible, setGenderPickerVisible] = useState(false);
-    
+
     const [isPasswordSectionVisible, setPasswordSectionVisible] = useState(false);
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    
+
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        const loadImage = async () => {
-            // NOTE: This uses the same AsyncStorage key. Profile pictures will be shared
-            // between family and NGO logins if you use the same device.
-            // For a real app, you might want separate keys, e.g., `ngoProfileImageUri`.
-            const savedImageUri = await AsyncStorage.getItem('profileImageUri');
-            if (savedImageUri) {
-                setProfileImage(savedImageUri);
-            }
-        };
-        loadImage();
-    }, []);
+        if (user.profile_photo) {
+            setProfileImage(user.profile_photo);
+        }
+    }, [user.profile_photo]);
 
     const handleImagePick = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -50,7 +43,6 @@ export default function EditProfileScreen() {
         if (!result.canceled) {
             const imageUri = result.assets[0].uri;
             setProfileImage(imageUri);
-            await AsyncStorage.setItem('profileImageUri', imageUri);
         }
     };
 
@@ -72,15 +64,34 @@ export default function EditProfileScreen() {
         setLoading(true);
         try {
             const userId = await AsyncStorage.getItem('userId');
-            const payload = { name, email, gender };
+            const formData = new FormData();
+            formData.append('name', name);
+            formData.append('email', email);
+            formData.append('gender', gender);
+
             if (newPassword && currentPassword) {
-                payload.newPassword = newPassword;
-                payload.currentPassword = currentPassword;
+                formData.append('newPassword', newPassword);
+                formData.append('currentPassword', currentPassword);
             }
+
+            // Check if profileImage exists and is a local URI (not a remote one already saved)
+            if (profileImage && !profileImage.startsWith('http')) {
+                const uriParts = profileImage.split('.');
+                const fileType = uriParts[uriParts.length - 1];
+                formData.append('profile_photo', {
+                    uri: profileImage,
+                    name: `profile-${userId}.${fileType}`,
+                    type: `image/${fileType}`,
+                } as any); // Type assertion for FormData
+            }
+
             const response = await fetch(`${BACKEND_API_URL}/api/users/${userId}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+                headers: {
+                    // 'Content-Type' is NOT set here for FormData, the browser/RN sets it automatically
+                    // with the correct 'multipart/form-data' boundary.
+                },
+                body: formData,
             });
             const data = await response.json();
             if (response.ok) {
@@ -97,8 +108,8 @@ export default function EditProfileScreen() {
     };
 
     return (
-        <ScrollView 
-            style={styles.container} 
+        <ScrollView
+            style={styles.container}
             contentContainerStyle={{ paddingBottom: 50 }}
             keyboardShouldPersistTaps="handled"
         >
@@ -106,7 +117,7 @@ export default function EditProfileScreen() {
 
             <View style={styles.avatarContainer}>
                 <TouchableOpacity onPress={handleImagePick}>
-                    <Image 
+                    <Image
                         source={profileImage ? { uri: profileImage } : require('@/assets/images/jahana.png')} // Changed default image
                         style={styles.avatar}
                     />
@@ -115,17 +126,17 @@ export default function EditProfileScreen() {
             </View>
 
             <Text style={styles.label}>Full Name</Text>
-            <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Enter your full name" placeholderTextColor="#b94e4e"/>
+            <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Enter your full name" placeholderTextColor="#b94e4e" />
 
             <Text style={styles.label}>Email Address</Text>
-            <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Enter your email" keyboardType="email-address" autoCapitalize="none" placeholderTextColor="#b94e4e"/>
-            
+            <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Enter your email" keyboardType="email-address" autoCapitalize="none" placeholderTextColor="#b94e4e" />
+
             <Text style={styles.label}>Gender</Text>
             <View>
                 <TouchableOpacity style={styles.input} onPress={() => setGenderPickerVisible(!isGenderPickerVisible)}>
                     <View style={styles.dropdownHeader}>
-                       <Text style={styles.dropdownHeaderText}>{gender}</Text>
-                       <Ionicons name={isGenderPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" />
+                        <Text style={styles.dropdownHeaderText}>{gender}</Text>
+                        <Ionicons name={isGenderPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" />
                     </View>
                 </TouchableOpacity>
                 {isGenderPickerVisible && (
@@ -140,57 +151,58 @@ export default function EditProfileScreen() {
             </View>
 
             <View style={styles.collapsibleContainer}>
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={styles.collapsibleHeader}
                     onPress={() => setPasswordSectionVisible(!isPasswordSectionVisible)}
                     activeOpacity={0.8}
                 >
                     <Ionicons name="key-outline" size={22} color="#3A0000" />
                     <Text style={styles.collapsibleTitle}>Change Password</Text>
-                    <Ionicons 
-                      name={isPasswordSectionVisible ? 'chevron-up-outline' : 'chevron-down-outline'} 
-                      size={22} 
-                      color="#3A0000" 
+                    <Ionicons
+                        name={isPasswordSectionVisible ? 'chevron-up-outline' : 'chevron-down-outline'}
+                        size={22}
+                        color="#3A0000"
                     />
                 </TouchableOpacity>
                 {isPasswordSectionVisible && (
                     <View style={styles.collapsibleContent}>
                         <Text style={styles.label}>Current Password</Text>
-                        <TextInput 
-                            style={styles.input} 
-                            secureTextEntry 
-                            value={currentPassword} 
-                            onChangeText={setCurrentPassword} 
+                        <TextInput
+                            style={styles.input}
+                            secureTextEntry
+                            value={currentPassword}
+                            onChangeText={setCurrentPassword}
                             placeholder="Enter current password"
                             placeholderTextColor="#b94e4e"
                         />
-                        
+
                         <Text style={styles.label}>New Password</Text>
-                        <TextInput 
-                            style={styles.input} 
-                            secureTextEntry 
-                            value={newPassword} 
-                            onChangeText={setNewPassword} 
+                        <TextInput
+                            style={styles.input}
+                            secureTextEntry
+                            value={newPassword}
+                            onChangeText={setNewPassword}
                             placeholder="Enter new password"
                             placeholderTextColor="#b94e4e"
                         />
 
                         <Text style={styles.label}>Confirm New Password</Text>
-                        <TextInput 
-                            style={styles.input} 
-                            secureTextEntry 
-                            value={confirmPassword} 
-                            onChangeText={setConfirmPassword} 
+                        <TextInput
+                            style={styles.input}
+                            secureTextEntry
+                            value={confirmPassword}
+                            onChangeText={setConfirmPassword}
                             placeholder="Confirm new password"
                             placeholderTextColor="#b94e4e"
                         />
                     </View>
                 )}
             </View>
-            
-            <CustomButton title={loading ? 'Saving...' : 'Save Changes'} onPress={handleSave} disabled={loading} style={{marginTop: 30}}/>
+
+            <CustomButton title={loading ? 'Saving...' : 'Save Changes'} onPress={handleSave} disabled={loading} style={{ marginTop: 30 }} />
         </ScrollView>
     );
+
 }
 
 const styles = StyleSheet.create({
@@ -206,27 +218,27 @@ const styles = StyleSheet.create({
     dropdown: { backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 1, borderColor: '#F0E0E0', marginTop: -15, },
     dropdownItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#F0E0E0' },
     dropdownText: { fontSize: 16 },
-    collapsibleContainer: { 
-        backgroundColor: '#F5EAEA', 
-        borderRadius: 12, 
+    collapsibleContainer: {
+        backgroundColor: '#F5EAEA',
+        borderRadius: 12,
         marginTop: 10,
     },
-    collapsibleHeader: { 
-        flexDirection: 'row', 
-        alignItems: 'center', 
+    collapsibleHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
         justifyContent: 'space-between',
         padding: 16,
     },
-    collapsibleTitle: { 
-        flex: 1, 
-        fontSize: 16, 
-        fontWeight: 'bold', 
-        color: '#3A0000', 
-        marginLeft: 10 
+    collapsibleTitle: {
+        flex: 1,
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#3A0000',
+        marginLeft: 10
     },
-    collapsibleContent: { 
-        borderTopWidth: 1, 
-        borderTopColor: '#E4C4C4', 
+    collapsibleContent: {
+        borderTopWidth: 1,
+        borderTopColor: '#E4C4C4',
         paddingTop: 20,
         paddingHorizontal: 16,
         paddingBottom: 0,
