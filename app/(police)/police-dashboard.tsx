@@ -12,6 +12,14 @@ const recentCases = [
 const actionCards = [
     { title: 'View Statistics', description: 'Access comprehensive statistics on missing persons cases.', buttonText: 'View', iconName: 'stats-chart', image: require('@/assets/images/statistics.png'), href: '/statistics' },
     { title: 'Monitor Reports', description: 'Track and manage ongoing missing person reports in your jurisdiction.', buttonText: 'Monitor', iconName: 'document-text', image: require('@/assets/images/reports.png'), href: '/reports' },
+     { 
+      title: 'Add New Admin', 
+      description: 'Create accounts for new police officers.', 
+      buttonText: 'Add', 
+      iconName: 'person-add', 
+      image: require('@/assets/images/add_admin.png'), // IMPORTANT: Make sure you have an image at this path
+      href: '/(police)/add-admin' // This will navigate to the new screen
+    },
 ]
 
 export default function PoliceDashboardScreen() {
