@@ -1,56 +1,129 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { Stack } from 'expo-router';
+// app/(family)/notifications.tsx
 
-// REMOVED: The mock data array has been deleted.
-/*
-const notifications = [ ... ];
-*/
+// --- CHANGE: Added hooks for state and effects, and components for loading/refreshing ---
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+// --- CHANGE: useFocusEffect is needed to refresh data when the screen is viewed ---
+import { Stack, useFocusEffect } from 'expo-router';
+// --- CHANGE: AsyncStorage is needed to get the logged-in user's ID ---
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BACKEND_API_URL } from '../../config/api';
+
+// --- CHANGE: Defined an interface for the notification data from the backend ---
+interface Notification {
+    _id: string;
+    message: string;
+    created_at: string;
+    is_read: boolean;
+}
 
 export default function NotificationsScreen() {
-    // ADDED: A new state variable to hold notifications. It starts as an empty array.
-    // In a real application, you would use useEffect to fetch this data from a server.
-    const [notifications, setNotifications] = React.useState([]);
+    // --- CHANGE: Added new state variables for loading and pull-to-refresh ---
+    const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
+    // --- CHANGE: This new function fetches data from your backend ---
+    const fetchNotifications = async (isRefreshing = false) => {
+        if (!isRefreshing) setLoading(true);
+        try {
+            const userId = await AsyncStorage.getItem('userId');
+            if (!userId) throw new Error('User session not found.');
+            
+            const endpoint = `${BACKEND_API_URL}/api/notifications`;
+            const response = await fetch(endpoint, {
+                headers: { 'user-id': userId }, // Send user ID to the backend
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                setNotifications(data);
+            } else {
+                throw new Error(data.msg || 'Failed to fetch notifications.');
+            }
+        } catch (error: any) {
+            console.error('Failed to fetch notifications:', error.message);
+        } finally {
+            if (!isRefreshing) setLoading(false);
+            setRefreshing(false);
+        }
+    };
+
+    // --- CHANGE: useFocusEffect re-fetches data every time the user visits this screen ---
+    useFocusEffect(
+        useCallback(() => {
+            fetchNotifications();
+        }, [])
+    );
+
+    // --- CHANGE: This function handles the pull-to-refresh gesture ---
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        fetchNotifications(true);
+    }, []);
+
+    // --- CHANGE: Added a loading indicator for better UX ---
+    if (loading && !refreshing) {
+        return (
+            <View style={styles.centered}>
+                <Stack.Screen options={{ title: 'Notifications' }} />
+                <ActivityIndicator size="large" color="#850a0a" />
+            </View>
+        );
+    }
 
     return (
         <>
-            {/* This adds a proper header with a title to the screen */}
             <Stack.Screen options={{ title: 'Notifications', headerShown: true }} />
-            <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-                {/* The logic now checks the state variable. Since it's empty, it will show the placeholder. */}
-                {notifications.length > 0 ? (
-                    notifications.map(item => (
-                        <View key={item.id} style={styles.notificationItem}>
-                            <View style={[styles.iconContainer, { backgroundColor: `${item.color}20` }]}>
-                                <Ionicons name={item.icon as any} size={24} color={item.color} />
-                            </View>
-                            <View style={styles.textContainer}>
-                                <Text style={styles.title}>{item.title}</Text>
-                                <Text style={styles.message}>{item.message}</Text>
-                                <Text style={styles.time}>{item.time}</Text>
-                            </View>
-                        </View>
-                    ))
-                ) : (
-                    <View style={styles.emptyContainer}>
+            {/* --- CHANGE: Added RefreshControl to the ScrollView --- */}
+            <ScrollView
+                style={styles.container}
+                contentContainerStyle={{ flexGrow: 1 }} // Ensures empty view is centered
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            >
+                {/* --- CHANGE: Updated the logic to display real data or an empty message --- */}
+                {notifications.length === 0 ? (
+                    <View style={styles.centered}>
                         <Ionicons name="notifications-off-outline" size={60} color="#A47171" />
                         <Text style={styles.emptyText}>You have no new notifications.</Text>
                     </View>
+                ) : (
+                    notifications.map(item => (
+                        <View key={item._id} style={styles.notificationItem}>
+                            <View style={styles.iconContainer}>
+                                <Ionicons name="information-circle-outline" size={24} color="#850a0a" />
+                            </View>
+                            <View style={styles.textContainer}>
+                                {/* Display the message from the backend */}
+                                <Text style={styles.message}>{item.message}</Text>
+                                {/* Display the creation date from the backend, formatted nicely */}
+                                <Text style={styles.time}>{new Date(item.created_at).toLocaleString()}</Text>
+                            </View>
+                        </View>
+                    ))
                 )}
             </ScrollView>
         </>
     );
 }
 
+// --- CHANGE: Styles have been updated and cleaned up ---
 const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#FFFBF8',
     },
-    // ADDED: Style to make the empty container fill the screen
-    scrollContent: {
-        flexGrow: 1,
+    centered: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#FFFBF8', // Ensure background color for loading view
+    },
+    emptyText: {
+        marginTop: 15,
+        fontSize: 16,
+        color: '#A47171',
     },
     notificationItem: {
         flexDirection: 'row',
@@ -66,35 +139,20 @@ const styles = StyleSheet.create({
         borderRadius: 22,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: '#F5EAEA',
         marginRight: 15,
     },
     textContainer: {
         flex: 1,
     },
-    title: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1E1E1E',
-    },
     message: {
-        fontSize: 14,
-        color: '#5B4242',
-        marginTop: 2,
+        fontSize: 15,
+        color: '#3A0000',
+        lineHeight: 22,
     },
     time: {
         fontSize: 12,
         color: '#A47171',
-        marginTop: 4,
-    },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        // REMOVED: paddingTop is no longer needed
-    },
-    emptyText: {
-        marginTop: 15,
-        fontSize: 16,
-        color: '#A47171',
+        marginTop: 5,
     },
 });
