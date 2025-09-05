@@ -22,6 +22,7 @@ export default function SubmitReportScreen() {
     const [description, setDescription] = useState('');
     const [relation, setRelation] = useState('');
     const [contactNumber, setContactNumber] = useState('');
+    const [familyEmail, setFamilyEmail] = useState('');
     const [photoUri, setPhotoUri] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [isGenderPickerVisible, setGenderPickerVisible] = useState(false);
@@ -82,6 +83,10 @@ export default function SubmitReportScreen() {
         // Simple phone number validation (just check if it's numeric)
         if (!contactNumber || !/^\d+$/.test(contactNumber.replace(/\s+/g, ''))) {
             newErrors.contactNumber = 'Please enter a valid phone number (numbers only).';
+        }
+
+        if (!familyEmail || !/\S+@\S+\.\S+/.test(familyEmail)) {
+            newErrors.familyEmail = 'Please enter a valid email address.';
         }
 
         if (!photoUri) {
@@ -160,6 +165,7 @@ export default function SubmitReportScreen() {
             formData.append('description', description);
             formData.append('relationToReporter', relation);
             formData.append('reporterContact', contactNumber);
+            formData.append('familyEmail', familyEmail);
 
             console.log("[Frontend] Sending request to:", `${BACKEND_API_URL}/api/reports`);
 
@@ -183,6 +189,7 @@ export default function SubmitReportScreen() {
                 setDescription('');
                 setRelation('');
                 setContactNumber('');
+                setFamilyEmail('');
                 setPhotoUri(null);
                 setGenderPickerVisible(false);
                 setRelationPickerVisible(false);
@@ -364,6 +371,19 @@ Alert.alert(
                     maxLength={15}
                 />
                 {errors.contactNumber && <Text style={styles.errorText}>{errors.contactNumber}</Text>}
+                <Text style={styles.label}>Family Email</Text>
+                <TextInput
+                    style={[styles.input, errors.familyEmail && styles.inputError]}
+                    value={familyEmail}
+                    onChangeText={(text) => {
+                        setFamilyEmail(text);
+                        if (errors.familyEmail) setErrors({...errors, familyEmail: ''});
+                    }}
+                    placeholder="Enter family email"
+                    keyboardType="email-address"
+                    placeholderTextColor="#b94e4e"
+                />
+                {errors.familyEmail && <Text style={styles.errorText}>{errors.familyEmail}</Text>}
                 <Text style={styles.label}>Upload a Clear Photo of the Missing Person</Text>
                 <TouchableOpacity style={[styles.imagePicker, errors.photo && styles.imagePickerError]} onPress={handleImagePick}>
                     {photoUri ? (

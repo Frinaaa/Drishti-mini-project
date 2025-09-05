@@ -42,6 +42,7 @@
     "express": "^5.1.0",
     "mongoose": "^8.17.1",
     "multer": "^2.0.2",
+    "nodemailer": "^7.0.6",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-native": "0.79.5",
