@@ -5,7 +5,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { MissingReport, Role, User } = require('../models');
+const { MissingReport, Role, User,Notification } = require('../models');
 
 // --- MULTER CONFIGURATION FOR IMAGE UPLOADS ---
 const reportUploadsDir = path.join(__dirname, '..', 'uploads', 'reports');
@@ -130,5 +130,41 @@ router.get('/:id', async (req, res) => {
         res.status(500).send('Server Error');
     }
 });
+router.put('/verify/:id', async (req, res) => {
+    try {
+        const report = await MissingReport.findById(req.params.id);
+        if (!report) { return res.status(404).json({ msg: 'Report not found.' }); }
 
+        report.status = 'Verified';
+        await report.save();
+
+        const notificationMessage = `Good news! Your report for "${report.person_name}" has been verified by an NGO and is now active.`;
+        const newNotification = new Notification({ recipient: report.user, message: notificationMessage });
+        await newNotification.save();
+        
+        res.json({ msg: 'Report verified and notification sent to the family.' });
+    } catch (err) {
+        console.error("🔴 [Backend Error] /api/reports/verify:", err);
+        res.status(500).send('Server Error');
+    }
+});
+
+router.put('/reject/:id', async (req, res) => {
+    try {
+        const report = await MissingReport.findById(req.params.id);
+        if (!report) { return res.status(404).json({ msg: 'Report not found.' }); }
+
+        report.status = 'Rejected';
+        await report.save();
+
+        const notificationMessage = `Update: Your report for "${report.person_name}" has been reviewed and rejected. Please contact support for more information.`;
+        const newNotification = new Notification({ recipient: report.user, message: notificationMessage });
+        await newNotification.save();
+        
+        res.json({ msg: 'Report rejected and notification sent to the family.' });
+    } catch (err) {
+        console.error("🔴 [Backend Error] /api/reports/reject:", err);
+        res.status(500).send('Server Error');
+    }
+});
 module.exports = router;

@@ -56,7 +56,7 @@ export default function NgoDashboardScreen() {
                 {/* CORRECTED PATH & TYPO: Navigation path is now correct and 'submit-reports' is fixed to 'submit-report'. */}
                 <TouchableOpacity 
                     style={styles.actionButton} 
-                    onPress={() => router.push('/submit-report')}
+                    onPress={() => router.push('/submit-reports')}
                 >
                     <Ionicons name="person-add-outline" size={22} color="#3A0000" />
                     <Text style={styles.actionButtonText}>Register Missing Person</Text>

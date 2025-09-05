@@ -187,23 +187,21 @@ export default function SubmitReportScreen() {
                 setGenderPickerVisible(false);
                 setRelationPickerVisible(false);
 
-                Alert.alert(
-                    'Report Submitted',
-                    data.msg || 'The missing person report has been successfully submitted.',
-                    [{
-                        text: 'OK',
-                        onPress: () => {
-                            setLoading(true); // Keep loading state during navigation
-                            try {
-                                router.replace('/(ngo)/ngo-dashboard');
-                            } catch (navError) {
-                                console.error('Navigation error:', navError);
-                                // Fallback navigation
-                                router.push('/(ngo)/ngo-dashboard');
-                            }
-                        }
-                    }]
-                );
+                // The corrected code
+Alert.alert(
+    'Report Submitted',
+    data.msg || 'The missing person report has been successfully submitted.',
+    [{
+        text: 'OK',
+        // --- THIS IS THE CORRECTED NAVIGATION ---
+        // We directly navigate back. Since this screen was pushed on top of the
+        // dashboard, `router.back()` is the cleanest and most reliable way
+        // to return to the correct dashboard (either NGO or Family).
+        onPress: () => {
+            router.back();
+        }
+    }]
+);
             } else {
                 throw new Error(data.msg || 'Failed to submit report');
             }
