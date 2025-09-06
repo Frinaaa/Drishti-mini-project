@@ -5,15 +5,15 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_API_URL } from '../../config/api';
 
-const languages = ['English', 'Spanish', 'Hindi', 'French'];
+// const languages = ['English', 'Spanish', 'Hindi', 'French']; // Removed as App Language is removed
 
 export default function ProfileScreen() {
     const router = useRouter();
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
-    const [isLanguagePickerVisible, setLanguagePickerVisible] = useState(false);
-    const [selectedLanguage, setSelectedLanguage] = useState('English');
+    // const [isLanguagePickerVisible, setLanguagePickerVisible] = useState(false); // Removed
+    // const [selectedLanguage, setSelectedLanguage] = useState('English'); // Removed
 
     useFocusEffect(
         useCallback(() => {
@@ -82,29 +82,8 @@ export default function ProfileScreen() {
                     <Ionicons name="chevron-forward-outline" size={20} color="#A47171" />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/(family)/privacy-settings')}>
-                    <View style={styles.settingIconContainer}><Ionicons name="lock-closed-outline" size={22} color="#3A0000" /></View>
-                    <Text style={styles.settingLabel}>Privacy Settings</Text>
-                    <Ionicons name="chevron-forward-outline" size={20} color="#A47171" />
-                </TouchableOpacity>
-
-                <View>
-                    <TouchableOpacity style={styles.settingItem} onPress={() => { setLanguagePickerVisible(!isLanguagePickerVisible); }}>
-                        <View style={styles.settingIconContainer}><Ionicons name="globe-outline" size={22} color="#3A0000" /></View>
-                        <Text style={styles.settingLabel}>App Language</Text>
-                        <Text style={styles.selectedValue}>{selectedLanguage}</Text>
-                        <Ionicons name={isLanguagePickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#A47171" />
-                    </TouchableOpacity>
-                    {isLanguagePickerVisible && (
-                        <View style={styles.dropdown}>
-                            {languages.map(lang => (
-                                <TouchableOpacity key={lang} style={styles.dropdownItem} onPress={() => { setSelectedLanguage(lang); setLanguagePickerVisible(false); Alert.alert("Language Changed", `App language set to ${lang}.`) }}>
-                                    <Text style={styles.dropdownText}>{lang}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    )}
-                </View>
+                {/* Privacy Settings Removed */}
+                {/* App Language Removed */}
 
                 <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/(family)/aboutUs')}>
                     <View style={styles.settingIconContainer}><Ionicons name="information-circle-outline" size={22} color="#3A0000" /></View>
@@ -138,28 +117,5 @@ const styles = StyleSheet.create({
     logoutButton: { backgroundColor: '#F5EAEA', paddingVertical: 16, borderRadius: 12, alignItems: 'center', },
     logoutButtonText: { color: '#870808', fontSize: 16, fontWeight: 'bold', },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFBF8', },
-    selectedValue: {
-        fontSize: 16,
-        color: '#A47171',
-        marginRight: 6,
-    },
-    dropdown: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: '#F0E0E0',
-        marginTop: -5,
-        marginBottom: 10,
-        overflow: 'hidden',
-    },
-    dropdownItem: {
-        paddingVertical: 12,
-        paddingHorizontal: 15,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F0E0E0',
-    },
-    dropdownText: {
-        fontSize: 16,
-        color: '#3A0000',
-    },
+    // Removed selectedValue, dropdown, dropdownItem, dropdownText styles as they are no longer needed
 });
