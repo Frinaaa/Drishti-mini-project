@@ -20,6 +20,8 @@ type: String,
 enum: ['Active', 'Frozen', 'Blocked'],
 default: 'Active'
 },
+ resetPasswordCode: { type: String },
+    resetPasswordExpires: { type: Date },
 });
 
 // Defines the documents in the 'requests' collection
