@@ -6,8 +6,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_API_URL } from '../../config/api';
 
 const settingsItems = [
-    { icon: 'briefcase-outline', label: 'My Assignments', screen: '/(ngo)/my-assignments' },
-    { icon: 'toggle-outline', label: 'Set Availability' },
     { icon: 'information-circle-outline', label: 'About Drishti', screen: '/aboutUs' },
 ];
 
@@ -91,8 +89,8 @@ export default function NgoProfileScreen() {
                 </TouchableOpacity>
             </View>
 
+            {/* Settings Container - Only 'About Drishti' remains */}
             <View style={styles.settingsContainer}>
-                <Text style={styles.settingsTitle}>Settings</Text>
                 {settingsItems.map((item, index) => (
                     <TouchableOpacity key={index} style={styles.settingItem} onPress={() => handleSettingPress(item)}>
                         <View style={styles.settingIconContainer}>
@@ -109,7 +107,6 @@ export default function NgoProfileScreen() {
             </TouchableOpacity>
         </ScrollView>
     );
-
 }
 
 const styles = StyleSheet.create({
@@ -122,7 +119,7 @@ const styles = StyleSheet.create({
     editButton: { backgroundColor: '#F5EAEA', paddingVertical: 12, paddingHorizontal: 40, borderRadius: 30, },
     editButtonText: { color: '#3A0000', fontSize: 16, fontWeight: '600', },
     settingsContainer: { marginBottom: 30, },
-    settingsTitle: { fontSize: 20, fontWeight: 'bold', color: '#1E1E1E', marginBottom: 10, paddingHorizontal: 5, },
+    // settingsTitle: { fontSize: 20, fontWeight: 'bold', color: '#1E1E1E', marginBottom: 10, paddingHorizontal: 5, }, // Removed
     settingItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 12, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: '#F0E0E0', },
     settingIconContainer: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F5EAEA', justifyContent: 'center', alignItems: 'center', marginRight: 15, },
     settingLabel: { flex: 1, fontSize: 16, color: '#3A0000', },
