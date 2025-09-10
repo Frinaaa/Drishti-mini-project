@@ -19,7 +19,6 @@ const getBackendUrl = () => {
 // Types
 interface NgoApplication {
   _id: string;
-  requestId: string;
   ngoName: string;
   email: string;
   contactNumber?: string;
@@ -242,7 +241,6 @@ export default function NgoManagementScreen() {
                   <Text style={styles.modalTitle}>{selectedApplication.ngoName}</Text>
                   <TouchableOpacity onPress={closeModal}><Ionicons name="close-circle" size={30} color="#A47171" /></TouchableOpacity>
                 </View>
-                <InfoRow label="Request ID" value={selectedApplication.requestId} />
                 <InfoRow label="Registration ID" value={selectedApplication.registrationId || ''} />
                 <InfoRow label="Email" value={selectedApplication.email} />
                 <InfoRow label="Contact" value={selectedApplication.contactNumber || ''} />
