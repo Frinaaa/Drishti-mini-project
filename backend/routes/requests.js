@@ -1,5 +1,5 @@
 // backend/routes/requests.js
-/* eslint-env node */
+// This file handles all API requests related to the NGO application process.
 
 const express = require('express');
 const router = express.Router();
@@ -7,154 +7,177 @@ const fs = require('fs');
 const path = require('path');
 const { Request, User, Role, Notification } = require('../models');
 
-const UPLOADS_DIR = path.join(__dirname, '..', 'uploads','request'); // eslint-disable-line no-undef
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+// --- DIRECTORY SETUP ---
+// Ensures that the folder for storing uploaded documents exists.
+const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
 
-// --- NGO APPLICATION SUBMISSION ---
+
+// @route   POST /api/requests/submit-for-registration
+// @desc    A new NGO submits their application form.
+// @access  Public
 router.post('/submit-for-registration', async (req, res) => {
+  console.log('--- [Backend] /submit-for-registration hit ---');
   try {
     const { ngoName, registrationId, description, contactNumber, email, location, password, documentData } = req.body;
 
+    // --- Validation ---
     if (!ngoName || !registrationId || !description || !contactNumber || !email || !location || !password || !documentData) {
-      return res.status(400).json({ msg: 'All fields are required.' });
+        return res.status(400).json({ msg: 'All fields, including a password and ID proof, are required.' });
     }
-
     if (await Request.findOne({ email, status: { $in: ['Pending', 'Approved'] } })) {
-      return res.status(400).json({ msg: 'An application with this email is already pending or approved.' });
+        return res.status(400).json({ msg: 'An application with this email is already pending or approved.' });
     }
-
     if (await User.findOne({ email })) {
-      return res.status(400).json({ msg: 'An active user account with this email already exists.' });
+        return res.status(400).json({ msg: 'An active user account with this email already exists.' });
     }
-
-    const fileBuffer = Buffer.from(documentData.fileBase64, 'base64'); // eslint-disable-line no-undef
+    
+    // --- File Handling ---
+    // Decode the Base64 string from the frontend into a file buffer and save it.
+    const fileBuffer = Buffer.from(documentData.fileBase64, 'base64');
     const uniqueFilename = `${Date.now()}-${documentData.fileName}`;
     const filePath = path.join(UPLOADS_DIR, uniqueFilename);
     fs.writeFileSync(filePath, fileBuffer);
-    const documentPath = `uploads/request/${uniqueFilename}`;
+    const documentPath = `uploads/${uniqueFilename}`;
 
-    const lastRequest = await Request.findOne().sort({ dateOfRequest: -1 });
-    const nextId = lastRequest ? parseInt(lastRequest.requestId.split('-')[1]) + 1 : 1001;
-    const newRequestId = `REQ-${String(nextId).padStart(5, '0')}`;
-
+    // --- Create and Save the New Request Document ---
     const newRequest = new Request({
-      requestId: newRequestId, ngoName, registrationId, description, contactNumber, email, location,
+      ngoName, registrationId, description, contactNumber, email, location,
       proposedPassword: password, documentPath, status: 'Pending',
     });
-
     await newRequest.save();
+    console.log('✅ New application saved successfully:', newRequest._id);
+
     res.status(201).json({ msg: 'Your application has been submitted and is pending review.' });
   } catch (err) {
-    console.error("Error in NGO application submission:", err.message);
-    res.status(500).json({ msg: 'Server Error during registration submission.', error: err.message });
+    console.error("🔴 [Backend Error] /submit-for-registration:", err);
+    res.status(500).send('Server Error');
   }
 });
 
 
-
-// --- FETCH ALL APPLICATIONS ---
-router.get('/all-applications', async (req, res) => {
+// @route   GET /api/requests/all-applications
+// @desc    Police fetch the list of all NGO applications.
+// @access  Private (Police only)
+router.get('/all-applications', async (req, res) =>  {
   try {
     const applications = await Request.find({})
-      .populate('approvedUser', 'name email status')
-      .sort({ dateOfRequest: -1 });
+                                     // `.populate` links the `approvedUser` ID to the actual user document
+                                     // and returns the specified fields. This is crucial for the frontend.
+                                     .populate('approvedUser', 'name email status')
+                                     .sort({ dateOfRequest: -1 }); // Show newest first
     res.json(applications);
   } catch (err) {
-    console.error("Error fetching applications:", err.message);
-    res.status(500).json({ msg: 'Server Error fetching applications.', error: err.message });
+    console.error("🔴 [Backend Error] /all-applications:", err);
+    res.status(500).send('Server Error');
   }
 });
 
-// --- APPROVE NGO APPLICATION ---
+
+// @route   PUT /api/requests/approve-application/:id
+// @desc    Police approve an application, which creates a new User.
+// @access  Private (Police only)
 router.put('/approve-application/:id', async (req, res) => {
-  try {
-    const request = await Request.findById(req.params.id);
-    if (!request || request.status !== 'Pending') {
-      return res.status(400).json({ msg: 'Application not found or already actioned.' });
+    try {
+        // Step 1: Find the application and validate it's pending.
+        const request = await Request.findById(req.params.id);
+        if (!request || request.status !== 'Pending') {
+            return res.status(400).json({ msg: 'Application not found or has already been actioned.' });
+        }
+
+        // Step 2: Find the 'NGO' role needed to create the user.
+        const ngoRole = await Role.findOne({ role_name: 'NGO' });
+        if (!ngoRole) {
+            return res.status(500).json({ msg: 'System error: "NGO" role not found.' });
+        }
+
+        // Step 3: Create the new User document in the 'users' collection.
+        const newUser = new User({
+            name: request.ngoName,
+            email: request.email,
+            password: request.proposedPassword, // Use the password from the application
+            role: ngoRole._id,
+            status: 'Active', // The new user is active immediately upon approval
+        });
+        await newUser.save();
+        console.log(`✅ User '${newUser.name}' CREATED in 'users' collection.`);
+
+        // Step 4: Update the original application document.
+        request.status = 'Approved';
+        request.approvedUser = newUser._id; // Link the application to the new user
+        await request.save();
+        console.log(`✅ Request '${request._id}' UPDATED to 'Approved'.`);
+
+        // Step 5: Create an in-app notification for the newly created user.
+        const notificationMessage = `Congratulations, ${request.ngoName}! Your application has been approved. You can now log in.`;
+        const newNotification = new Notification({ recipient: newUser._id, message: notificationMessage });
+        await newNotification.save();
+
+        res.json({ msg: `Application for '${request.ngoName}' approved. User account created.` });
+    } catch (err) {
+        console.error("🔴 [Backend Error] /approve-application:", err);
+        res.status(500).json({ msg: 'Server Error during approval process.', error: err.message });
     }
-
-    const ngoRole = await Role.findOne({ role_name: 'NGO' });
-    if (!ngoRole) {
-      return res.status(500).json({ msg: 'System error: NGO role not found.' });
-    }
-
-    if (!request.proposedPassword || request.proposedPassword.trim() === '') {
-      return res.status(400).json({ msg: 'No password provided in the application.' });
-    }
-
-    const newUser = new User({
-      name: request.ngoName,
-      email: request.email,
-      password: request.proposedPassword.trim(), // In a real app, this should be hashed
-      role: ngoRole._id,
-      status: 'Active',
-    });
-
-    await newUser.save();
-
-    request.status = 'Approved';
-    request.approvedUser = newUser._id;
-    await request.save();
-
-    const notificationMessage = `Congratulations, ${request.ngoName}! Your application has been approved.`;
-    const newNotification = new Notification({ recipient: newUser._id, message: notificationMessage });
-    await newNotification.save();
-
-    res.json({ msg: `Application for '${request.ngoName}' approved. User account created.` });
-  } catch (err) {
-    console.error("Error during approval process:", err.message);
-    res.status(500).json({ msg: 'Server Error during approval.', error: err.message });
-  }
 });
 
-// --- REJECT NGO APPLICATION ---
+
+// @route   PUT /api/requests/reject-application/:id
+// @desc    Police reject a pending application.
+// @access  Private (Police only)
 router.put('/reject-application/:id', async (req, res) => {
-  try {
-    const request = await Request.findById(req.params.id);
-    if (!request || request.status !== 'Pending') {
-      return res.status(404).json({ msg: 'Application not found or already actioned.' });
+    try {
+        const request = await Request.findById(req.params.id);
+        if (!request || request.status !== 'Pending') {
+            return res.status(404).json({ msg: 'Application not found or has already been actioned.' });
+        }
+        request.status = 'Rejected';
+        await request.save();
+        console.log(`✅ Request '${request._id}' UPDATED to 'Rejected'.`);
+        res.json({ msg: `Application for '${request.ngoName}' has been rejected.` });
+    } catch (err) {
+        console.error("🔴 [Backend Error] /reject-application:", err);
+        res.status(500).send('Server Error');
     }
-
-    request.status = 'Rejected';
-    await request.save();
-
-    res.json({ msg: `Application for '${request.ngoName}' has been rejected.` });
-  } catch (err) {
-    console.error("Error during rejection process:", err.message);
-    res.status(500).json({ msg: 'Server Error during rejection.', error: err.message });
-  }
 });
 
 
-// --- FREEZE/UNFREEZE USER ROUTES ---
-router.put('/freeze-user/:requestId', async (req, res) => {
-  try {
-    const request = await Request.findById(req.params.requestId);
-    if (!request || !request.approvedUser) {
-      return res.status(404).json({ msg: 'No approved user found for this request.' });
+// @route   PUT /api/requests/freeze-user/:_id
+// @desc    Police freeze an approved NGO's user account.
+// @access  Private (Police only)
+router.put('/freeze-user/:_id', async (req, res) => {
+    try { 
+        const request = await Request.findById(req.params._id);
+        if (!request || !request.approvedUser) {
+            return res.status(404).json({ msg: 'No approved user found for this request.' });
+        }
+        // Use `updateOne` for a more efficient database operation
+        await User.updateOne({ _id: request.approvedUser }, { $set: { status: 'Frozen' } });
+        res.json({ msg: `NGO user account has been frozen.` });
+    } catch (err) {
+        console.error("🔴 [Backend Error] /freeze-user:", err);
+        res.status(500).send('Server Error');
     }
-
-    await User.updateOne({ _id: request.approvedUser }, { $set: { status: 'Frozen' } });
-    res.json({ msg: `NGO user account has been frozen.` });
-  } catch (err) {
-    console.error("Error during freeze operation:", err.message);
-    res.status(500).json({ msg: 'Server Error during freeze operation.', error: err.message });
-  }
 });
 
-router.put('/unfreeze-user/:requestId', async (req, res) => {
-  try {
-    const request = await Request.findById(req.params.requestId);
-    if (!request || !request.approvedUser) {
-      return res.status(404).json({ msg: 'No approved user found for this request.' });
-    }
 
-    await User.updateOne({ _id: request.approvedUser }, { $set: { status: 'Active' } });
-    res.json({ msg: `NGO user account has been unfrozen.` });
-  } catch (err) {
-    console.error("Error during unfreeze operation:", err.message);
-    res.status(500).json({ msg: 'Server Error during unfreeze operation.', error: err.message });
-  }
+// @route   PUT /api/requests/unfreeze-user/:_id
+// @desc    Police unfreeze an NGO's user account.
+// @access  Private (Police only)
+router.put('/unfreeze-user/:_id', async (req, res) => {
+    try {
+        const request = await Request.findById(req.params._id);
+        if (!request || !request.approvedUser) {
+            return res.status(404).json({ msg: 'No approved user found for this request.' });
+        }
+        await User.updateOne({ _id: request.approvedUser }, { $set: { status: 'Active' } });
+        res.json({ msg: `NGO user account has been unfrozen.` });
+    } catch (err) {
+        console.error("🔴 [Backend Error] /unfreeze-user:", err);
+        res.status(500).send('Server Error');
+    }
 });
+
 
 module.exports = router;
