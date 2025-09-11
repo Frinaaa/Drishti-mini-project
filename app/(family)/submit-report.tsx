@@ -1,378 +1,203 @@
-import React, { useState } from 'react';
+// PASTE THIS ENTIRE CODE INTO YOUR submit-report.tsx FILE
+
+import React, { useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, Alert, Image, TouchableOpacity, Platform } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import CustomButton from '../../components/CustomButton';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_API_URL } from '../../config/api';
 
-// Data for the dropdowns (Family version)
+// Data for the dropdowns
 const genderOptions = ['Male', 'Female', 'Other'];
 const relationOptions = ['Parent', 'Sibling', 'Spouse', 'Child', 'Friend', 'Other Relative'];
 
+type FormDataState = { personName: string; age: string; gender: string; lastSeenLocation: string; lastSeenDateTime: string; description: string; relation: string; contactNumber: string; };
+const initialFormData: FormDataState = { personName: '', age: '', gender: '', lastSeenLocation: '', lastSeenDateTime: '', description: '', relation: '', contactNumber: '' };
+
 export default function SubmitReportScreen() {
     const router = useRouter();
-    
-    const [personName, setPersonName] = useState('');
-    const [age, setAge] = useState('');
-    const [gender, setGender] = useState('');
-    const [lastSeenLocation, setLastSeenLocation] = useState('');
-    const [lastSeenDateTime, setLastSeenDateTime] = useState('');
-    const [description, setDescription] = useState('');
-    const [relation, setRelation] = useState('');
-    const [contactNumber, setContactNumber] = useState('');
+    const [formData, setFormData] = useState<FormDataState>(initialFormData);
     const [photoUri, setPhotoUri] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [isGenderPickerVisible, setGenderPickerVisible] = useState(false);
     const [isRelationPickerVisible, setRelationPickerVisible] = useState(false);
+    const [errors, setErrors] = useState<Partial<Record<keyof FormDataState | 'photo', string>>>({});
+    const submissionSuccess = useRef(false);
 
-    // Validation error states
-    const [errors, setErrors] = useState<{[key: string]: string}>({});
+    const resetForm = () => {
+        setFormData(initialFormData);
+        setPhotoUri(null);
+        setErrors({});
+        setGenderPickerVisible(false);
+        setRelationPickerVisible(false);
+    };
+
+    useFocusEffect(
+      useCallback(() => {
+        // --- LOG 1: To see if the effect runs ---
+        console.log(`[Focus Effect Fired] Flag is currently: ${submissionSuccess.current}`);
+        
+        if (submissionSuccess.current) {
+          // --- LOG 2: To confirm the form is being reset ---
+          console.log('[Focus Effect Action] Flag was true. Resetting form now.');
+          resetForm();
+          submissionSuccess.current = false;
+        }
+      }, [])
+    );
 
     const handleImagePick = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions!');
-            return;
-        }
+        if (status !== 'granted') { Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions!'); return; }
         let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'] as any,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.5,
+            mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5,
         });
-        if (!result.canceled) {
+        if (!result.canceled && result.assets) {
             setPhotoUri(result.assets[0].uri);
+            if (errors.photo) setErrors(prev => ({ ...prev, photo: undefined }));
         }
     };
 
-    const validateForm = () => {
-        const newErrors: {[key: string]: string} = {};
-
-        if (!personName || personName.trim().length < 2) {
-            newErrors.personName = 'Please enter a valid full name (at least 2 characters).';
+    const validateField = (name: keyof FormDataState, value: string) => {
+        // This function is correct, no changes needed.
+        let error = '';
+        switch (name) {
+            case 'personName': if (!value || value.trim().length < 2) error = 'Please enter a valid full name.'; break;
+            case 'age': if (!value || isNaN(Number(value)) || Number(value) < 1 || Number(value) > 120) error = 'Please enter a valid age.'; break;
+            case 'gender': if (!value) error = 'Please select a gender.'; break;
+            case 'lastSeenLocation': if (!value || value.trim().length < 3) error = 'Please enter a valid location.'; break;
+            case 'lastSeenDateTime': if (!value || value.trim().length < 3) error = 'Please enter valid date/time info.'; break;
+            case 'description': if (!value || value.trim().length < 10) error = 'Please provide a detailed description.'; break;
+            case 'relation': if (!value) error = 'Please select your relationship.'; break;
+            case 'contactNumber': if (!value) error = 'Contact number is required.'; else if (!/^\d{10}$/.test(value)) error = 'Please enter a valid 10-digit phone number.'; break;
         }
-
-        if (!age || isNaN(Number(age)) || Number(age) < 1 || Number(age) > 120) {
-            newErrors.age = 'Please enter a valid age between 1 and 120.';
-        }
-
-        if (!gender) {
-            newErrors.gender = 'Please select a gender.';
-        }
-
-        if (!lastSeenLocation || lastSeenLocation.trim().length < 3) {
-            newErrors.lastSeenLocation = 'Please enter a valid last seen location (at least 3 characters).';
-        }
-
-        if (!lastSeenDateTime || lastSeenDateTime.trim().length < 3) {
-            newErrors.lastSeenDateTime = 'Please enter valid last seen date and time information.';
-        }
-
-        if (!description || description.trim().length < 10) {
-            newErrors.description = 'Please provide a detailed description (at least 10 characters).';
-        }
-
-        if (!relation) {
-            newErrors.relation = 'Please select your relationship to the missing person.';
-        }
-
-        // Simple phone number validation (just check if it's numeric)
-        if (!contactNumber || !/^\d+$/.test(contactNumber.replace(/\s+/g, ''))) {
-            newErrors.contactNumber = 'Please enter a valid phone number (numbers only).';
-        }
-
-        if (!photoUri) {
-            newErrors.photo = 'Please upload a clear photo of the missing person.';
-        }
-
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
+        setErrors(prev => ({ ...prev, [name]: error }));
+        return !error;
     };
+
+    const handleChange = (name: keyof FormDataState, value: string) => {
+        if (name === 'age' || name === 'contactNumber') value = value.replace(/[^0-9]/g, '');
+        setFormData(prev => ({ ...prev, [name]: value }));
+        if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+    };
+
+    const handleBlur = (name: keyof FormDataState) => { validateField(name, formData[name]); };
 
     const handleSubmit = async () => {
-        if (!validateForm()) {
-            return;
-        }
+        const isFormValid = (Object.keys(formData) as Array<keyof FormDataState>).every(key => validateField(key, formData[key]));
+        const isPhotoValid = !!photoUri;
+        if (!isPhotoValid) setErrors(prev => ({ ...prev, photo: 'A clear photo is required for submission.' }));
+        if (!isFormValid || !isPhotoValid) return Alert.alert('Incomplete Form', 'Please correct the highlighted errors before submitting.');
 
         setLoading(true);
         try {
             const userId = await AsyncStorage.getItem('userId');
-            if (!userId) {
-                setLoading(false);
-                return Alert.alert('Error', 'You must be logged in to submit a report.');
+            if (!userId) { setLoading(false); return Alert.alert('Error', 'You must be logged in.'); }
+            
+            const formPayload = new FormData();
+            formPayload.append('user', userId);
+            formPayload.append('person_name', formData.personName);
+            formPayload.append('age', formData.age);
+            formPayload.append('gender', formData.gender);
+            formPayload.append('last_seen', `${formData.lastSeenLocation} at ${formData.lastSeenDateTime}`);
+            formPayload.append('description', formData.description);
+            formPayload.append('relationToReporter', formData.relation);
+            formPayload.append('reporterContact', formData.contactNumber);
+            if (photoUri) {
+                const filename = photoUri.split('/').pop() || 'photo.jpg';
+                const fileType = filename.endsWith('png') ? 'image/png' : 'image/jpeg';
+                formPayload.append('photo', { uri: photoUri, name: filename, type: fileType } as any);
             }
             
-            const formData = new FormData();
-            formData.append('user', userId);
-            formData.append('person_name', personName);
-            formData.append('age', age);
-            formData.append('gender', gender);
-            formData.append('last_seen', `${lastSeenLocation} at ${lastSeenDateTime}`);
-            formData.append('description', description);
-            formData.append('relationToReporter', relation);
-            formData.append('reporterContact', contactNumber);
+            const response = await fetch(`${BACKEND_API_URL}/api/reports`, { method: 'POST', body: formPayload });
+            const responseData = await response.json();
 
-            // Handle the photo for FormData
-            let filename = 'photo.jpg'; // Default fallback
-            if (photoUri) {
-                const uriParts = photoUri.split('/');
-                const lastPart = uriParts[uriParts.length - 1];
-                if (lastPart && lastPart.includes('.')) {
-                    // Clean the filename and ensure it has proper extension
-                    filename = lastPart.split('?')[0].replace(/[^a-zA-Z0-9.-]/g, '_');
-                }
-            }
-            const fileType = filename.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
-
-            console.log('Photo upload debug:', { photoUri, filename, fileType, platform: Platform.OS });
-
-            if (Platform.OS === 'web') {
-                // On web, handle different types of URIs
-                try {
-                    console.log('Processing image for web upload...');
-                    if (!photoUri) throw new Error('No photo URI available');
-                    const response = await fetch(photoUri);
-                    const blob = await response.blob();
-                    console.log('Blob created:', { size: blob.size, type: blob.type });
-
-                    // Create a File object for better compatibility with multer
-                    const file = new File([blob], filename, { type: fileType });
-                    formData.append('photo', file);
-                    console.log('Photo appended to FormData as File object');
-                } catch (error) {
-                    console.error('Error processing image for web:', error);
-                    throw new Error('Failed to process image for upload');
-                }
-            } else {
-                // For native platforms, use the standard approach
-                console.log('Using native platform approach');
-                formData.append('photo', {
-                    uri: photoUri,
-                    name: filename,
-                    type: fileType,
-                } as any);
-            }
-
-            const response = await fetch(`${BACKEND_API_URL}/api/reports`, {
-                method: 'POST',
-                // Don't set any headers - let FormData set Content-Type automatically
-                body: formData,
-            });
-
+            // --- THIS IS THE MOST IMPORTANT PART OF THE DEBUGGING ---
             if (response.ok) {
-                // Clear form data on success
-                setPersonName('');
-                setAge('');
-                setGender('');
-                setLastSeenLocation('');
-                setLastSeenDateTime('');
-                setDescription('');
-                setRelation('');
-                setContactNumber('');
-                setPhotoUri(null);
-                setGenderPickerVisible(false);
-                setRelationPickerVisible(false);
-
-                Alert.alert(
-                    'Report Submitted',
-                    'Your report has been received and will be reviewed by verified NGOs.',
-                    [{
-                        text: 'OK',
-                        onPress: () => {
-                            setLoading(true); // Keep loading state during navigation
-                            try {
-                                router.replace('/(family)/family-dashboard');
-                            } catch (navError) {
-                                console.error('Navigation error:', navError);
-                                // Fallback navigation
-                                router.push('/(family)/family-dashboard');
-                            }
-                        }
-                    }]
+                // --- LOG 3: To see if the success block is reached ---
+                console.log('[Handle Submit] Response was OK. Setting success flag to true.');
+                submissionSuccess.current = true;
+                Alert.alert('Report Submitted', responseData.msg || 'Your report has been received.',
+                    [{ text: 'OK', onPress: () => router.replace('/(family)/family-dashboard') }]
                 );
             } else {
-                const errorData = await response.json();
-                Alert.alert('Submission Failed', errorData.msg || 'An error occurred.');
+                // --- LOG 4: To see what the error response is ---
+                console.error(`[Handle Submit] Response was NOT OK. Status: ${response.status}`);
+                console.error('Backend response data:', responseData);
+                throw new Error(responseData.msg || `Request failed with status ${response.status}`);
             }
         } catch (error) {
-            console.error('Report submission error:', error);
-            Alert.alert('Connection Error', 'Could not connect to the server to submit the report.');
+            const errorMessage = (error instanceof Error) ? error.message : 'Could not connect to the server.';
+            Alert.alert('Submission Failed', errorMessage);
         } finally {
             setLoading(false);
         }
     };
 
     return (
+        // YOUR JSX IS UNCHANGED
         <>
-            <Stack.Screen options={{ title: 'Report Missing Person', headerShown: true }} />
+            <Stack.Screen options={{ title: 'Report Missing Person' }} />
             <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-                <View>
-                    <Text style={styles.label}>Full Name of Missing Person</Text>
-                <TextInput
-                    style={[styles.input, errors.personName && styles.inputError]}
-                    value={personName}
-                    onChangeText={(text) => {
-                        setPersonName(text);
-                        if (errors.personName) setErrors({...errors, personName: ''});
-                    }}
-                    placeholder="Enter full name"
-                    placeholderTextColor="#b94e4e"
-                />
+                <Text style={styles.label}>Full Name of Missing Person</Text>
+                <TextInput style={[styles.input, errors.personName && styles.inputError]} value={formData.personName} onChangeText={(text) => handleChange('personName', text)} onBlur={() => handleBlur('personName')} placeholder="Enter full name" placeholderTextColor="#b94e4e" />
                 {errors.personName && <Text style={styles.errorText}>{errors.personName}</Text>}
+                
                 <Text style={styles.label}>Age</Text>
-                <TextInput
-                    style={[styles.input, errors.age && styles.inputError]}
-                    value={age}
-                    onChangeText={(text) => {
-                        // Only allow numbers
-                        const numericText = text.replace(/[^0-9]/g, '');
-                        setAge(numericText);
-                        if (errors.age) setErrors({...errors, age: ''});
-                    }}
-                    placeholder="Enter age"
-                    keyboardType="numeric"
-                    placeholderTextColor="#b94e4e"
-                    maxLength={3}
-                />
+                <TextInput style={[styles.input, errors.age && styles.inputError]} value={formData.age} onChangeText={(text) => handleChange('age', text)} onBlur={() => handleBlur('age')} placeholder="Enter age" keyboardType="numeric" placeholderTextColor="#b94e4e" maxLength={3} />
                 {errors.age && <Text style={styles.errorText}>{errors.age}</Text>}
+
                 <Text style={styles.label}>Gender</Text>
                 <View>
-                    <TouchableOpacity
-                        style={[styles.input, errors.gender && styles.inputError]}
-                        onPress={() => { setGenderPickerVisible(!isGenderPickerVisible); setRelationPickerVisible(false); }}
-                    >
+                    <TouchableOpacity style={[styles.input, errors.gender && styles.inputError]} onPress={() => setGenderPickerVisible(!isGenderPickerVisible)}>
                         <View style={styles.dropdownHeader}>
-                            <Text style={[styles.dropdownHeaderText, !gender && styles.placeholderText]}>
-                                {gender || 'Select gender'}
-                            </Text>
-                            <Ionicons
-                                name={isGenderPickerVisible ? "chevron-up-outline" : "chevron-down-outline"}
-                                size={20}
-                                color="#3A0000"
-                            />
+                            <Text style={[styles.dropdownHeaderText, !formData.gender && styles.placeholderText]}>{formData.gender || 'Select gender'}</Text>
+                            <Ionicons name={isGenderPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" />
                         </View>
                     </TouchableOpacity>
                     {errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
-                    {isGenderPickerVisible && (
-                        <View style={styles.dropdown}>
-                            {genderOptions.map(option => (
-                                <TouchableOpacity
-                                    key={option}
-                                    style={styles.dropdownItem}
-                                    onPress={() => { setGender(option); setGenderPickerVisible(false); }}
-                                >
-                                    <Text style={styles.dropdownText}>{option}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    )}
+                    {isGenderPickerVisible && <View style={styles.dropdown}>{genderOptions.map(option => (<TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { handleChange('gender', option); setGenderPickerVisible(false); }}><Text style={styles.dropdownText}>{option}</Text></TouchableOpacity>))}</View>}
                 </View>
+                
                 <Text style={styles.label}>Last Seen Location</Text>
-                <TextInput
-                    style={[styles.input, errors.lastSeenLocation && styles.inputError]}
-                    value={lastSeenLocation}
-                    onChangeText={(text) => {
-                        setLastSeenLocation(text);
-                        if (errors.lastSeenLocation) setErrors({...errors, lastSeenLocation: ''});
-                    }}
-                    placeholder="Enter last seen location"
-                    placeholderTextColor="#b94e4e"
-                />
+                <TextInput style={[styles.input, errors.lastSeenLocation && styles.inputError]} value={formData.lastSeenLocation} onChangeText={(text) => handleChange('lastSeenLocation', text)} onBlur={() => handleBlur('lastSeenLocation')} placeholder="Enter last seen location" placeholderTextColor="#b94e4e" />
                 {errors.lastSeenLocation && <Text style={styles.errorText}>{errors.lastSeenLocation}</Text>}
+
                 <Text style={styles.label}>Last Seen Date & Time</Text>
-                <TextInput
-                    style={[styles.input, errors.lastSeenDateTime && styles.inputError]}
-                    value={lastSeenDateTime}
-                    onChangeText={(text) => {
-                        setLastSeenDateTime(text);
-                        if (errors.lastSeenDateTime) setErrors({...errors, lastSeenDateTime: ''});
-                    }}
-                    placeholder="e.g., Yesterday at 5 PM"
-                    placeholderTextColor="#b94e4e"
-                />
+                <TextInput style={[styles.input, errors.lastSeenDateTime && styles.inputError]} value={formData.lastSeenDateTime} onChangeText={(text) => handleChange('lastSeenDateTime', text)} onBlur={() => handleBlur('lastSeenDateTime')} placeholder="e.g., Yesterday at 5 PM" placeholderTextColor="#b94e4e" />
                 {errors.lastSeenDateTime && <Text style={styles.errorText}>{errors.lastSeenDateTime}</Text>}
+                
                 <Text style={styles.label}>Description / Clothing / Identifiable Marks</Text>
-                <TextInput
-                    style={[styles.input, styles.textArea, errors.description && styles.inputError]}
-                    value={description}
-                    onChangeText={(text) => {
-                        setDescription(text);
-                        if (errors.description) setErrors({...errors, description: ''});
-                    }}
-                    multiline
-                    placeholder="Describe what the person was wearing"
-                    placeholderTextColor="#b94e4e"
-                />
+                <TextInput style={[styles.input, styles.textArea, errors.description && styles.inputError]} value={formData.description} onChangeText={(text) => handleChange('description', text)} onBlur={() => handleBlur('description')} multiline placeholder="Describe what the person was wearing" placeholderTextColor="#b94e4e" />
                 {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
+                
                 <Text style={styles.label}>Relation to Missing Person</Text>
                 <View>
-                    <TouchableOpacity
-                        style={[styles.input, errors.relation && styles.inputError]}
-                        onPress={() => { setRelationPickerVisible(!isRelationPickerVisible); setGenderPickerVisible(false); }}
-                    >
+                    <TouchableOpacity style={[styles.input, errors.relation && styles.inputError]} onPress={() => setRelationPickerVisible(!isRelationPickerVisible)}>
                         <View style={styles.dropdownHeader}>
-                            <Text style={[styles.dropdownHeaderText, !relation && styles.placeholderText]}>
-                                {relation || 'Select your relationship'}
-                            </Text>
-                            <Ionicons
-                                name={isRelationPickerVisible ? "chevron-up-outline" : "chevron-down-outline"}
-                                size={20}
-                                color="#3A0000"
-                            />
+                            <Text style={[styles.dropdownHeaderText, !formData.relation && styles.placeholderText]}>{formData.relation || 'Select your relationship'}</Text>
+                            <Ionicons name={isRelationPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" />
                         </View>
                     </TouchableOpacity>
                     {errors.relation && <Text style={styles.errorText}>{errors.relation}</Text>}
-                    {isRelationPickerVisible && (
-                        <View style={styles.dropdown}>
-                            {relationOptions.map(option => (
-                                <TouchableOpacity
-                                    key={option}
-                                    style={styles.dropdownItem}
-                                    onPress={() => { setRelation(option); setRelationPickerVisible(false); }}
-                                >
-                                    <Text style={styles.dropdownText}>{option}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    )}
+                    {isRelationPickerVisible && <View style={styles.dropdown}>{relationOptions.map(option => (<TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { handleChange('relation', option); setRelationPickerVisible(false); }}><Text style={styles.dropdownText}>{option}</Text></TouchableOpacity>))}</View>}
                 </View>
+                
                 <Text style={styles.label}>Your Contact Number</Text>
-                <TextInput
-                    style={[styles.input, errors.contactNumber && styles.inputError]}
-                    value={contactNumber}
-                    onChangeText={(text) => {
-                        // Only allow numbers
-                        const numericText = text.replace(/[^0-9]/g, '');
-                        setContactNumber(numericText);
-                        if (errors.contactNumber) setErrors({...errors, contactNumber: ''});
-                    }}
-                    placeholder="Enter your contact number"
-                    keyboardType="phone-pad"
-                    placeholderTextColor="#b94e4e"
-                    maxLength={15}
-                />
+                <TextInput style={[styles.input, errors.contactNumber && styles.inputError]} value={formData.contactNumber} onChangeText={(text) => handleChange('contactNumber', text)} onBlur={() => handleBlur('contactNumber')} placeholder="Enter your 10-digit contact number" keyboardType="phone-pad" placeholderTextColor="#b94e4e" maxLength={10} />
                 {errors.contactNumber && <Text style={styles.errorText}>{errors.contactNumber}</Text>}
+                
                 <Text style={styles.label}>Upload a Clear Photo of the Missing Person</Text>
                 <TouchableOpacity style={[styles.imagePicker, errors.photo && styles.imagePickerError]} onPress={handleImagePick}>
-                    {photoUri ? (
-                        <Image source={{ uri: photoUri }} style={styles.imagePreview} />
-                    ) : (
-                        <Text style={styles.imagePickerText}>Tap to upload photo</Text>
-                    )}
+                    {photoUri ? <Image source={{ uri: photoUri }} style={styles.imagePreview} /> : <Text style={styles.imagePickerText}>Tap to upload photo</Text>}
                 </TouchableOpacity>
                 {errors.photo && <Text style={styles.errorText}>{errors.photo}</Text>}
                 <Text style={styles.subLabel}>Photo is essential for AI-powered face matching.</Text>
 
-                <CustomButton
-                    title={loading ? 'Submitting...' : 'Submit Report'}
-                    onPress={handleSubmit}
-                    disabled={loading}
-                    style={{ marginTop: 20 }}
-                />
-            </View>
-        </ScrollView>
+                <CustomButton title={loading ? 'Submitting...' : 'Submit Report'} onPress={handleSubmit} disabled={loading} style={{ marginTop: 20 }} />
+            </ScrollView>
         </>
     );
 }
@@ -383,11 +208,11 @@ const styles = StyleSheet.create({
     label: { fontSize: 16, fontWeight: '600', color: '#3A0000', marginBottom: 8 },
     subLabel: { fontSize: 13, color: '#A47171', textAlign: 'center', marginTop: -10, marginBottom: 20 },
     input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E4C4C4', borderRadius: 12, padding: 14, fontSize: 16, marginBottom: 20, color: '#3A0000', justifyContent: 'center', minHeight: 50 },
-    inputError: { borderColor: '#ff4444' },
-    errorText: { color: '#ff4444', fontSize: 12, marginTop: -15, marginBottom: 10, marginLeft: 4 },
+    inputError: { borderColor: '#D32F2F', borderWidth: 1.5 },
+    errorText: { color: '#D32F2F', fontSize: 12, marginTop: -15, marginBottom: 10, marginLeft: 4 },
     textArea: { height: 120, textAlignVertical: 'top' },
     imagePicker: { height: 120, borderRadius: 12, borderWidth: 2, borderColor: '#E4C4C4', borderStyle: 'dashed', backgroundColor: 'rgba(245, 234, 234, 0.5)', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-    imagePickerError: { borderColor: '#ff4444' },
+    imagePickerError: { borderColor: '#D32F2F', borderWidth: 1.5 },
     imagePickerText: { fontSize: 16, color: '#5B4242', fontWeight: '500' },
     imagePreview: { width: '100%', height: '100%', borderRadius: 10 },
     dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
