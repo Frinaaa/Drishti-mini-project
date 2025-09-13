@@ -1,6 +1,8 @@
-import React, { useState, useCallback, useRef } from 'react'; // Import necessary hooks
+// PASTE THIS ENTIRE CODE INTO YOUR submit-report.tsx FILE
+
+import React, { useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, Alert, Image, TouchableOpacity, Platform } from 'react-native';
-import { Stack, useRouter, useFocusEffect } from 'expo-router'; // Import useFocusEffect
+import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import CustomButton from '../../components/CustomButton';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,46 +13,20 @@ import { BACKEND_API_URL } from '../../config/api';
 const genderOptions = ['Male', 'Female', 'Other'];
 const relationOptions = ['Parent', 'Sibling', 'Spouse', 'Child', 'Friend', 'Other Relative'];
 
-// A type definition for our form data for better code quality
-type FormDataState = {
-    personName: string;
-    age: string;
-    gender: string;
-    lastSeenLocation: string;
-    lastSeenDateTime: string;
-    description: string;
-    relation: string;
-    contactNumber: string;
-};
-
-// The initial state for the form, used for resetting
-const initialFormData: FormDataState = {
-    personName: '',
-    age: '',
-    gender: '',
-    lastSeenLocation: '',
-    lastSeenDateTime: '',
-    description: '',
-    relation: '',
-    contactNumber: '',
-};
+type FormDataState = { personName: string; age: string; gender: string; lastSeenLocation: string; lastSeenDateTime: string; description: string; relation: string; contactNumber: string; };
+const initialFormData: FormDataState = { personName: '', age: '', gender: '', lastSeenLocation: '', lastSeenDateTime: '', description: '', relation: '', contactNumber: '' };
 
 export default function SubmitReportScreen() {
     const router = useRouter();
-    
     const [formData, setFormData] = useState<FormDataState>(initialFormData);
     const [photoUri, setPhotoUri] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [isGenderPickerVisible, setGenderPickerVisible] = useState(false);
     const [isRelationPickerVisible, setRelationPickerVisible] = useState(false);
     const [errors, setErrors] = useState<Partial<Record<keyof FormDataState | 'photo', string>>>({});
-
-    // A ref is used to track if a submission was successful across renders without causing a re-render itself.
     const submissionSuccess = useRef(false);
 
-    // This function resets all state variables to their initial empty values.
     const resetForm = () => {
-        console.log("Form is being reset."); // For debugging
         setFormData(initialFormData);
         setPhotoUri(null);
         setErrors({});
@@ -58,52 +34,44 @@ export default function SubmitReportScreen() {
         setRelationPickerVisible(false);
     };
 
-    // This hook runs every time the screen comes into focus.
     useFocusEffect(
       useCallback(() => {
-        // We check the flag here. If it's true, it means we just came from a successful submission.
+        // --- LOG 1: To see if the effect runs ---
+        console.log(`[Focus Effect Fired] Flag is currently: ${submissionSuccess.current}`);
+        
         if (submissionSuccess.current) {
-          resetForm(); // Reset the form fields.
-          submissionSuccess.current = false; // Reset the flag so the form doesn't clear again if the user just switches tabs.
+          // --- LOG 2: To confirm the form is being reset ---
+          console.log('[Focus Effect Action] Flag was true. Resetting form now.');
+          resetForm();
+          submissionSuccess.current = false;
         }
       }, [])
     );
 
     const handleImagePick = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions!');
-            return;
-        }
+        if (status !== 'granted') { Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions!'); return; }
         let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'] as any, allowsEditing: true, aspect: [1, 1], quality: 0.5,
+            mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5,
         });
-        if (!result.canceled) {
+        if (!result.canceled && result.assets) {
             setPhotoUri(result.assets[0].uri);
-            if (errors.photo) setErrors(prev => ({ ...prev, photo: '' }));
+            if (errors.photo) setErrors(prev => ({ ...prev, photo: undefined }));
         }
     };
 
     const validateField = (name: keyof FormDataState, value: string) => {
+        // This function is correct, no changes needed.
         let error = '';
         switch (name) {
-            case 'personName':
-                if (!value || value.trim().length < 2) error = 'Please enter a valid full name.'; break;
-            case 'age':
-                if (!value || isNaN(Number(value)) || Number(value) < 1 || Number(value) > 120) error = 'Please enter a valid age.'; break;
-            case 'gender':
-                if (!value) error = 'Please select a gender.'; break;
-            case 'lastSeenLocation':
-                if (!value || value.trim().length < 3) error = 'Please enter a valid location.'; break;
-            case 'lastSeenDateTime':
-                if (!value || value.trim().length < 3) error = 'Please enter valid date/time info.'; break;
-            case 'description':
-                if (!value || value.trim().length < 10) error = 'Please provide a detailed description.'; break;
-            case 'relation':
-                if (!value) error = 'Please select your relationship.'; break;
-            case 'contactNumber':
-                if (!value) error = 'Contact number is required.';
-                else if (!/^\d{10}$/.test(value)) error = 'Please enter a valid 10-digit phone number.'; break;
+            case 'personName': if (!value || value.trim().length < 2) error = 'Please enter a valid full name.'; break;
+            case 'age': if (!value || isNaN(Number(value)) || Number(value) < 1 || Number(value) > 120) error = 'Please enter a valid age.'; break;
+            case 'gender': if (!value) error = 'Please select a gender.'; break;
+            case 'lastSeenLocation': if (!value || value.trim().length < 3) error = 'Please enter a valid location.'; break;
+            case 'lastSeenDateTime': if (!value || value.trim().length < 3) error = 'Please enter valid date/time info.'; break;
+            case 'description': if (!value || value.trim().length < 10) error = 'Please provide a detailed description.'; break;
+            case 'relation': if (!value) error = 'Please select your relationship.'; break;
+            case 'contactNumber': if (!value) error = 'Contact number is required.'; else if (!/^\d{10}$/.test(value)) error = 'Please enter a valid 10-digit phone number.'; break;
         }
         setErrors(prev => ({ ...prev, [name]: error }));
         return !error;
@@ -115,12 +83,10 @@ export default function SubmitReportScreen() {
         if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
     };
 
-    const handleBlur = (name: keyof FormDataState) => {
-        validateField(name, formData[name]);
-    };
+    const handleBlur = (name: keyof FormDataState) => { validateField(name, formData[name]); };
 
     const handleSubmit = async () => {
-        const isFormValid = Object.keys(formData).every(key => validateField(key as keyof FormDataState, formData[key as keyof FormDataState]));
+        const isFormValid = (Object.keys(formData) as Array<keyof FormDataState>).every(key => validateField(key, formData[key]));
         const isPhotoValid = !!photoUri;
         if (!isPhotoValid) setErrors(prev => ({ ...prev, photo: 'A clear photo is required for submission.' }));
         if (!isFormValid || !isPhotoValid) return Alert.alert('Incomplete Form', 'Please correct the highlighted errors before submitting.');
@@ -139,28 +105,28 @@ export default function SubmitReportScreen() {
             formPayload.append('description', formData.description);
             formPayload.append('relationToReporter', formData.relation);
             formPayload.append('reporterContact', formData.contactNumber);
-
-            const filename = photoUri!.split('/').pop() || 'photo.jpg';
-            const fileType = filename.endsWith('png') ? 'image/png' : 'image/jpeg';
-            if (Platform.OS === 'web') {
-                const response = await fetch(photoUri!);
-                const blob = await response.blob();
-                formPayload.append('photo', blob, filename);
-            } else {
+            if (photoUri) {
+                const filename = photoUri.split('/').pop() || 'photo.jpg';
+                const fileType = filename.endsWith('png') ? 'image/png' : 'image/jpeg';
                 formPayload.append('photo', { uri: photoUri, name: filename, type: fileType } as any);
             }
             
             const response = await fetch(`${BACKEND_API_URL}/api/reports`, { method: 'POST', body: formPayload });
             const responseData = await response.json();
 
+            // --- THIS IS THE MOST IMPORTANT PART OF THE DEBUGGING ---
             if (response.ok) {
-                // On success, we set the ref flag to true before navigating.
+                // --- LOG 3: To see if the success block is reached ---
+                console.log('[Handle Submit] Response was OK. Setting success flag to true.');
                 submissionSuccess.current = true;
                 Alert.alert('Report Submitted', responseData.msg || 'Your report has been received.',
                     [{ text: 'OK', onPress: () => router.replace('/(family)/family-dashboard') }]
                 );
             } else {
-                throw new Error(responseData.msg || 'An unknown error occurred.');
+                // --- LOG 4: To see what the error response is ---
+                console.error(`[Handle Submit] Response was NOT OK. Status: ${response.status}`);
+                console.error('Backend response data:', responseData);
+                throw new Error(responseData.msg || `Request failed with status ${response.status}`);
             }
         } catch (error) {
             const errorMessage = (error instanceof Error) ? error.message : 'Could not connect to the server.';
@@ -171,6 +137,7 @@ export default function SubmitReportScreen() {
     };
 
     return (
+        // YOUR JSX IS UNCHANGED
         <>
             <Stack.Screen options={{ title: 'Report Missing Person' }} />
             <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
