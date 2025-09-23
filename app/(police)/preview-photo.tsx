@@ -17,10 +17,7 @@ export default function PreviewPhotoScreen() {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={24} color="#000" />
-                </TouchableOpacity>
-                <Text style={styles.title}>Preview Photo</Text>
+                
             </View>
 
             <View style={styles.imageContainer}>

@@ -32,7 +32,7 @@ export default function MatchFoundScreen() {
         <ScrollView style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.push('/(police)/police-dashboard')}>
-                    <Ionicons name="arrow-back" size={24} color="#000" />
+                    
                 </TouchableOpacity>
                 <Text style={styles.title}>Match Found Alert</Text>
             </View>

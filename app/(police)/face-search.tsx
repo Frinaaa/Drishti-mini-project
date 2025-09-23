@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } fr
 import { CameraView, Camera } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import CustomButton from '../../components/CustomButton'; // Assuming you have a custom button component
+import CustomButton from './components/CustomButton'; // Assuming you have a custom button component
 
 export default function FaceSearchScreen() {
     const [gender, setGender] = useState<string>('Female');
@@ -45,11 +45,7 @@ export default function FaceSearchScreen() {
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={24} color="#000" />
-                </TouchableOpacity>
-            </View>
+            
             <Text style={styles.title}>Search by Face</Text>
 
             <Text style={styles.label}>Gender</Text>
