@@ -60,6 +60,9 @@ export default function PoliceTabLayout() {
       <Tabs.Screen name="reports" options={{ href: null, title: 'Reports' }} />
       <Tabs.Screen name="statistics" options={{ href: null, title: 'Statistics' }} />
       <Tabs.Screen name="add-admin" options={{ href: null, title: 'Add New Admin' }} />
+      <Tabs.Screen name="preview-photo" options={{ href: null, title: 'Preview Photo' }} />
+      <Tabs.Screen name="scanning-face" options={{ href: null, title: 'Scanning Face' }} />
+      <Tabs.Screen name="match-found" options={{ href: null, title: 'Match Found' }} />
     </Tabs>
   );
 }
