@@ -1,14 +1,10 @@
-// backend/routes/requests.js
-// This file handles all API requests related to the NGO application process.
-
 const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const { Request, User, Role, Notification } = require('../models');
 
-// --- DIRECTORY SETUP ---
-// Ensures that the folder for storing uploaded documents exists.
+// --- DIRECTORY SETUP (remains the same) ---
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -23,8 +19,8 @@ router.post('/submit-for-registration', async (req, res) => {
   try {
     const { ngoName, registrationId, description, contactNumber, email, location, password, documentData } = req.body;
 
-    // --- Validation ---
-    if (!ngoName || !registrationId || !description || !contactNumber || !email || !location || !password || !documentData) {
+    // --- Validation (remains the same) ---
+    if (!ngoName || !registrationId || !description || !contactNumber || !email || !location || !password || !documentData || !documentData.fileBase64) {
         return res.status(400).json({ msg: 'All fields, including a password and ID proof, are required.' });
     }
     if (await Request.findOne({ email, status: { $in: ['Pending', 'Approved'] } })) {
@@ -34,10 +30,22 @@ router.post('/submit-for-registration', async (req, res) => {
         return res.status(400).json({ msg: 'An active user account with this email already exists.' });
     }
     
-    // --- File Handling ---
-    // Decode the Base64 string from the frontend into a file buffer and save it.
-    const fileBuffer = Buffer.from(documentData.fileBase64, 'base64');
-    const uniqueFilename = `${Date.now()}-${documentData.fileName}`;
+    // --- [THE FIX] File Handling with Prefix Stripping ---
+
+    // 1. Get the raw base64 string from the request body.
+    const rawBase64 = documentData.fileBase64;
+
+    // FOR DEBUGGING: Log the first 100 characters to see if the prefix exists
+    console.log('Received Base64 prefix:', rawBase64.substring(0, 100));
+
+    // 2. Use a regular expression to remove the data URI prefix (e.g., "data:image/jpeg;base64,").
+    //    This makes the code robustly handle cases where the prefix is or isn't present.
+    const pureBase64 = rawBase64.replace(/^data:image\/\w+;base64,/, "");
+
+    // 3. Create the buffer from the *pure* base64 data.
+    const fileBuffer = Buffer.from(pureBase64, 'base64');
+    
+    const uniqueFilename = `${Date.now()}-${documentData.fileName || 'document.jpg'}`;
     const filePath = path.join(UPLOADS_DIR, uniqueFilename);
     fs.writeFileSync(filePath, fileBuffer);
     const documentPath = `uploads/${uniqueFilename}`;

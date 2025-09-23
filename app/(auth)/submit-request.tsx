@@ -1,5 +1,3 @@
-// app/(auth)/submit-request.tsx
-
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, Platform, ScrollView, SafeAreaView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -10,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import CustomButton from '@/components/CustomButton';
 import { BACKEND_API_URL } from '@/config/api';
 
-// Helper function for web Base64 conversion
+// Helper function for web Base64 conversion (remains the same)
 const getBase64ForWebApp = (blob: Blob): Promise<string> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -107,12 +105,16 @@ export default function SubmitRequestScreen() {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 quality: 0.8,
+                // --- CHANGE #1: Request the base64 data directly from the picker ---
+                // This is the most reliable way to get the file data on native.
+                base64: true,
             });
             if (!result.canceled && result.assets) {
                 setDocument(result.assets[0]);
                 setErrors(prev => ({ ...prev, document: '' }));
             }
         } catch (error) {
+            console.error("Image picking error: ", error); // Added for better debugging
             Alert.alert('Error', 'An error occurred while picking the document.');
         }
     };
@@ -127,7 +129,6 @@ export default function SubmitRequestScreen() {
     };
 
     const handleSubmit = async () => {
-        // Run validation on all fields before submitting
         const isFormValid = Object.keys(formData).every(key => 
             validateField(key as keyof typeof formData, formData[key as keyof typeof formData])
         );
@@ -143,45 +144,49 @@ export default function SubmitRequestScreen() {
         
         setIsSubmitting(true);
         try {
-            // Prepare document for upload
             let base64String = '';
+
+            // --- CHANGE #2: Simplify the base64 retrieval logic ---
             if (Platform.OS === 'web') {
+                // Web logic remains the same, as it works correctly
                 const response = await fetch(document!.uri);
                 const blob = await response.blob();
                 base64String = await getBase64ForWebApp(blob);
             } else {
-                base64String = await FileSystem.readAsStringAsync(document!.uri, { encoding: FileSystem.EncodingType.Base64 });
+                // For native (iOS/Android), use the base64 string we requested in pickDocument
+                // This avoids using FileSystem.readAsStringAsync and potential URI issues.
+                if (!document?.base64) {
+                    throw new Error("Failed to get Base64 data from the selected document. Please try picking the document again.");
+                }
+                base64String = document.base64;
             }
-            const documentData = { fileBase64: base64String, fileName: document!.fileName || 'document.jpg' };
 
-            // Send data to the backend
+            const documentData = { 
+                fileBase64: base64String, 
+                fileName: document!.fileName || 'document.jpg' 
+            };
+
             const response = await fetch(`${BACKEND_API_URL}/api/requests/submit-for-registration`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...formData, documentData }),
             });
 
-            // Always parse the JSON response to get success or error messages
             const responseData = await response.json();
 
-            // --- GRACEFUL ERROR & SUCCESS HANDLING ---
             if (response.ok) {
-                // On success, show an alert. When the user dismisses it, reset the form and navigate.
                 Alert.alert(
                     'Success',
-                    responseData.msg, // Display success message from backend
+                    responseData.msg,
                     [{ text: 'OK', onPress: () => {
                         resetForm(); 
-                        // Use router.replace to navigate to the login screen and clear the form from navigation history.
                         router.replace('/(auth)/ngo-login');
                     }}]
                 );
             } else {
-                // If the backend returns an error (like a duplicate email), throw an error with the specific message.
                 throw new Error(responseData.msg || 'An unknown server error occurred.');
             }
         } catch (error) {
-            // This 'catch' block handles both network errors and the specific errors thrown above.
             const errorMessage = (error instanceof Error) ? error.message : 'An unexpected error occurred.';
             Alert.alert('Submission Failed', errorMessage);
         } finally {
