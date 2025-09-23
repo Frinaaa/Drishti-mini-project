@@ -9,8 +9,7 @@ import {
     ScrollView,
     ActivityIndicator,
 } from 'react-native';
-import { Stack } from 'expo-router';
-import { Camera } from 'expo-camera'; // Corrected: Removed unused 'CameraType'
+import { CameraView, Camera } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 
 // Make sure these import paths are correct for your project structure
@@ -21,10 +20,21 @@ import { AI_API_URL } from '../../config/api';
 // Defines the expected structure of a successful response from the AI server
 interface MatchResult {
     match_found: boolean;
-    identity?: string;
+    report_id?: string;
+    identity?: string; // For backward compatibility
     confidence?: number;
     message?: string;
     detail?: string;
+    // Enhanced fields from new API
+    person_name?: string;
+    age?: number;
+    gender?: string;
+    last_seen?: string;
+    description?: string;
+    reporterContact?: string;
+    status?: string;
+    submitted_at?: string;
+    file_path?: string;
 }
 
 export default function FaceSearchScreen() {
@@ -32,7 +42,7 @@ export default function FaceSearchScreen() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-    const cameraRef = useRef<Camera | null>(null);
+    const cameraRef = useRef<CameraView | null>(null);
 
     useEffect(() => {
         (async () => {
@@ -71,37 +81,58 @@ export default function FaceSearchScreen() {
         setIsLoading(true);
         setError(null);
 
-        const formData = new FormData();
-        const filename = photoUri.split('/').pop() || 'capture.jpg';
-        const fileType = filename.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
-
-        formData.append('file', {
-            uri: photoUri,
-            name: filename,
-            type: fileType,
-        } as any);
-
         try {
-            const response = await fetch(`${AI_API_URL}/find_match`, {
-                method: 'POST',
-                body: formData,
+            // Convert image to base64 for React Native compatibility
+            const response = await fetch(photoUri);
+            const blob = await response.blob();
+
+            // Convert blob to base64
+            const base64 = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const result = reader.result as string;
+                    // Remove the data URL prefix (data:image/jpeg;base64,)
+                    const base64Data = result.split(',')[1];
+                    resolve(base64Data);
+                };
+                reader.readAsDataURL(blob);
             });
 
-            const result: MatchResult = await response.json();
+            const fileType = photoUri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+            const base64WithPrefix = `data:${fileType};base64,${base64}`;
 
-            if (!response.ok) {
-                throw new Error(result.detail || `Request failed with status ${response.status}`);
+            // Use the React Native specific endpoint
+            const apiResponse = await fetch(`${AI_API_URL}/find_match_react_native`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    file_data: base64WithPrefix,
+                }),
+            });
+
+            const result: MatchResult = await apiResponse.json();
+
+            if (!apiResponse.ok) {
+                throw new Error(result.detail || `Request failed with status ${apiResponse.status}`);
             }
 
             if (result.match_found) {
                 const confidencePercentage = result.confidence ? (result.confidence * 100).toFixed(2) : 'N/A';
-                const reportName = result.identity
-                    ? result.identity.split('-').slice(1).join(' ').replace(/_/g, ' ').replace(/\.[^/.]+$/, "")
-                    : 'N/A';
+                const personName = result.person_name || result.identity || 'Unknown Person';
+
+                let matchDetails = `Name: ${personName}\nConfidence: ${confidencePercentage}%`;
+
+                // Add additional details if available
+                if (result.age) matchDetails += `\nAge: ${result.age}`;
+                if (result.gender) matchDetails += `\nGender: ${result.gender}`;
+                if (result.last_seen) matchDetails += `\nLast Seen: ${result.last_seen}`;
+                if (result.reporterContact) matchDetails += `\nContact: ${result.reporterContact}`;
 
                 Alert.alert(
                     'Match Found!',
-                    `A potential match was found for report: ${reportName}.\n\nConfidence: ${confidencePercentage}%`,
+                    matchDetails,
                     [{ text: 'OK' }]
                 );
             } else {
@@ -129,9 +160,7 @@ export default function FaceSearchScreen() {
     }
 
     return (
-        <>
-            <Stack.Screen options={{ title: 'Police Face Search' }} />
-            <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+        <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
                 <View style={styles.header}>
                     <Ionicons name="camera-outline" size={32} color="#3A0000" />
                     <Text style={styles.title}>Live Face Search</Text>
@@ -147,10 +176,10 @@ export default function FaceSearchScreen() {
                     {photoUri ? (
                         <Image source={{ uri: photoUri }} style={styles.imagePreview} />
                     ) : (
-                        <Camera
+                        <CameraView
                             ref={cameraRef}
                             style={styles.camera}
-                            type="front"
+                            facing="front"
                             ratio="1:1"
                         />
                     )}
@@ -186,7 +215,6 @@ export default function FaceSearchScreen() {
                     </View>
                 )}
             </ScrollView>
-        </>
     );
 }
 
