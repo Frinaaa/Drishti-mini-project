@@ -31,7 +31,7 @@ export default function HomeScreen() {
 	return (
 		<ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
 			<View style={styles.header}>
-				<Text style={styles.title}>Welcome to Drishti</Text>
+				<Text style={styles.title}>{'\n'}{'\n'} Welcome to Drishti</Text>
 				<Text style={styles.subtitle}>
 					Connecting families, volunteers, and officers for faster reunions.
 				</Text>
