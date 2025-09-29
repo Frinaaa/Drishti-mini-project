@@ -8,6 +8,36 @@ import { Ionicons } from '@expo/vector-icons';
 import CustomButton from '@/components/CustomButton';
 import { BACKEND_API_URL } from '@/config/api';
 
+// --- [NEW] Cross-Platform Alert Helper Function ---
+/**
+ * Displays an alert. On web, it uses the browser's `alert()`.
+ * On native, it uses React Native's `Alert.alert()`.
+ * It also handles simple `onPress` callbacks for the web.
+ * @param title The title of the alert.
+ * @param message The message body.
+ * @param buttons An array of buttons (primarily for native).
+ */
+const showAlert = (
+  title: string,
+  message?: string,
+  buttons?: Array<{ text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }>
+) => {
+  if (Platform.OS === 'web') {
+    // Combine title and message for the browser's simple alert.
+    const webMessage = message ? `${title}\n\n${message}` : title;
+    alert(webMessage);
+    // If there's an `onPress` action (like for a success redirect), trigger it.
+    // This simulates the user clicking "OK".
+    if (buttons && buttons.length > 0 && buttons[0].onPress) {
+      buttons[0].onPress();
+    }
+  } else {
+    // Use the standard native Alert API.
+    Alert.alert(title, message, buttons);
+  }
+};
+
+
 // Helper function for web Base64 conversion (remains the same)
 const getBase64ForWebApp = (blob: Blob): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -24,7 +54,7 @@ const getBase64ForWebApp = (blob: Blob): Promise<string> => {
 
 export default function SubmitRequestScreen() {
     const router = useRouter();
-    
+
     // Unified state for form data
     const [formData, setFormData] = useState({
         ngoName: '',
@@ -34,6 +64,7 @@ export default function SubmitRequestScreen() {
         email: '',
         location: '',
         password: '',
+        pinCode: '',
     });
 
     // State for validation errors and UI
@@ -79,12 +110,22 @@ export default function SubmitRequestScreen() {
                     error = 'Password must be at least 6 characters long.';
                 }
                 break;
+            case 'pinCode':
+                if (!value) {
+                    error = 'PIN Code is required.';
+                } else if (!/^\d{6}$/.test(value)) {
+                    error = 'PIN Code must be exactly 6 digits.';
+                }
+                break;
         }
         setErrors(prev => ({ ...prev, [name]: error }));
         return !error;
     };
 
     const handleChange = (name: keyof typeof formData, value: string) => {
+        if (name === 'pinCode' || name === 'contactNumber') {
+            value = value.replace(/[^0-9]/g, '');
+        }
         setFormData(prev => ({ ...prev, [name]: value }));
         if (errors[name]) {
             setErrors(prev => ({ ...prev, [name]: '' }));
@@ -98,15 +139,14 @@ export default function SubmitRequestScreen() {
     const pickDocument = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-            Alert.alert('Permission Denied', 'We need access to your photo library to upload documents.');
+            // [MODIFIED] Use the cross-platform showAlert
+            showAlert('Permission Denied', 'We need access to your photo library to upload documents.');
             return;
         }
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 quality: 0.8,
-                // --- CHANGE #1: Request the base64 data directly from the picker ---
-                // This is the most reliable way to get the file data on native.
                 base64: true,
             });
             if (!result.canceled && result.assets) {
@@ -114,22 +154,24 @@ export default function SubmitRequestScreen() {
                 setErrors(prev => ({ ...prev, document: '' }));
             }
         } catch (error) {
-            console.error("Image picking error: ", error); // Added for better debugging
-            Alert.alert('Error', 'An error occurred while picking the document.');
+            console.error("Image picking error: ", error);
+            // [MODIFIED] Use the cross-platform showAlert
+            showAlert('Error', 'An error occurred while picking the document.');
         }
     };
-    
+
     const resetForm = () => {
         setFormData({
             ngoName: '', registrationId: '', description: '',
             contactNumber: '', email: '', location: '', password: '',
+            pinCode: '',
         });
         setDocument(null);
         setErrors({});
     };
 
     const handleSubmit = async () => {
-        const isFormValid = Object.keys(formData).every(key => 
+        const isFormValid = Object.keys(formData).every(key =>
             validateField(key as keyof typeof formData, formData[key as keyof typeof formData])
         );
 
@@ -139,31 +181,28 @@ export default function SubmitRequestScreen() {
         }
 
         if (!isFormValid || !isDocValid) {
-            return Alert.alert('Invalid Information', 'Please correct the errors before submitting.');
+            // [MODIFIED] Use the cross-platform showAlert
+            return showAlert('Invalid Information', 'Please correct the errors before submitting.');
         }
-        
+
         setIsSubmitting(true);
         try {
             let base64String = '';
 
-            // --- CHANGE #2: Simplify the base64 retrieval logic ---
             if (Platform.OS === 'web') {
-                // Web logic remains the same, as it works correctly
                 const response = await fetch(document!.uri);
                 const blob = await response.blob();
                 base64String = await getBase64ForWebApp(blob);
             } else {
-                // For native (iOS/Android), use the base64 string we requested in pickDocument
-                // This avoids using FileSystem.readAsStringAsync and potential URI issues.
                 if (!document?.base64) {
                     throw new Error("Failed to get Base64 data from the selected document. Please try picking the document again.");
                 }
                 base64String = document.base64;
             }
 
-            const documentData = { 
-                fileBase64: base64String, 
-                fileName: document!.fileName || 'document.jpg' 
+            const documentData = {
+                fileBase64: base64String,
+                fileName: document!.fileName || 'document.jpg'
             };
 
             const response = await fetch(`${BACKEND_API_URL}/api/requests/submit-for-registration`, {
@@ -175,25 +214,29 @@ export default function SubmitRequestScreen() {
             const responseData = await response.json();
 
             if (response.ok) {
-                Alert.alert(
+                // [MODIFIED] Use the cross-platform showAlert
+                showAlert(
                     'Success',
                     responseData.msg,
-                    [{ text: 'OK', onPress: () => {
-                        resetForm(); 
-                        router.replace('/(auth)/ngo-login');
-                    }}]
+                    [{
+                        text: 'OK', onPress: () => {
+                            resetForm();
+                            router.replace('/(auth)/ngo-login');
+                        }
+                    }]
                 );
             } else {
                 throw new Error(responseData.msg || 'An unknown server error occurred.');
             }
         } catch (error) {
             const errorMessage = (error instanceof Error) ? error.message : 'An unexpected error occurred.';
-            Alert.alert('Submission Failed', errorMessage);
+            // [MODIFIED] Use the cross-platform showAlert
+            showAlert('Submission Failed', errorMessage);
         } finally {
             setIsSubmitting(false);
         }
     };
-    
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
@@ -233,6 +276,22 @@ export default function SubmitRequestScreen() {
                 </View>
                 {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
 
+                <View style={[styles.input, errors.pinCode && styles.inputError]}>
+                    <TextInput
+                        style={styles.passwordInput}
+                        placeholder="Set 6-digit PIN Code"
+                        placeholderTextColor="#b94e4e"
+                        value={formData.pinCode}
+                        onChangeText={(val) => handleChange('pinCode', val)}
+                        onBlur={() => handleBlur('pinCode')}
+                        // Note: secureTextEntry is missing. Add secureTextEntry={true} if you want the PIN to be masked.
+                        keyboardType="numeric"
+                        maxLength={6}
+                    />
+                </View>
+                {errors.pinCode && <Text style={styles.errorText}>{errors.pinCode}</Text>}
+
+
                 {!document ? (
                     <TouchableOpacity style={[styles.uploadButton, errors.document && styles.inputError]} onPress={pickDocument}>
                         <Ionicons name="cloud-upload-outline" size={24} color="#FFFFFF" />
@@ -249,10 +308,10 @@ export default function SubmitRequestScreen() {
                 )}
                 {errors.document && <Text style={styles.errorText}>{errors.document}</Text>}
 
-                <CustomButton 
-                    title={isSubmitting ? "Submitting..." : "Submit for Verification"} 
-                    onPress={handleSubmit} 
-                    disabled={isSubmitting} 
+                <CustomButton
+                    title={isSubmitting ? "Submitting..." : "Submit for Verification"}
+                    onPress={handleSubmit}
+                    disabled={isSubmitting}
                     style={styles.submitButton}
                     textStyle={styles.submitButtonText}
                     showActivityIndicator={isSubmitting}
@@ -260,6 +319,7 @@ export default function SubmitRequestScreen() {
             </ScrollView>
         </SafeAreaView>
     );
+
 };
 
 // Styles remain unchanged

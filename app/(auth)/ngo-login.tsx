@@ -20,28 +20,34 @@ export default function NgoLoginScreen() {
     }
     setLoading(true);
 
-    try {
-      const response = await fetch(`${BACKEND_API_URL}/api/auth/login`, {
+    // In your NGO login screen, inside the handleLogin function...
+
+try {
+    const response = await fetch(`${BACKEND_API_URL}/api/auth/ngo-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
-      });
+    });
 
-      const data = await response.json();
+    const responseData = await response.json();
 
-      if (response.ok) {
-        if (data.user.role?.role_name === 'NGO') {
-          // --- THIS IS THE KEY ADDITION ---
-          await AsyncStorage.setItem('userId', data.user._id);
+    if (response.ok) {
+        // Existing logic
+        await AsyncStorage.setItem('userId', responseData.user._id);
+        await AsyncStorage.setItem('token', responseData.token);
 
-          Alert.alert('Success', 'Logged in successfully!');
-          router.replace({ pathname: '/(ngo)/ngo-dashboard', params: { ngoName: data.user.name } });
-        } else {
-          Alert.alert('Login Failed', 'This login is for NGO volunteers only.');
+        // [+] ADD THIS LINE: Store the user's PIN code
+        if (responseData.user.pinCode) {
+             await AsyncStorage.setItem('userPinCode', responseData.user.pinCode.toString());
         }
-      } else {
-        Alert.alert('Login Failed', data.msg || 'Invalid credentials.');
-      }
+
+        // Navigate to dashboard
+        router.replace('/(ngo)/recent-uploads');
+    } else {
+        throw new Error(responseData.msg || 'Login failed');
+    }
+
+
     } catch (error) {
       console.error('Login error:', error);
       Alert.alert('Connection Error', 'Could not connect to the server.');

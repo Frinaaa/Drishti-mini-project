@@ -13,8 +13,31 @@ import { BACKEND_API_URL } from '../../config/api';
 const genderOptions = ['Male', 'Female', 'Other'];
 const relationOptions = ['Parent', 'Sibling', 'Spouse', 'Child', 'Friend', 'Other Relative'];
 
-type FormDataState = { personName: string; age: string; gender: string; lastSeenLocation: string; lastSeenDateTime: string; description: string; relation: string; contactNumber: string; };
-const initialFormData: FormDataState = { personName: '', age: '', gender: '', lastSeenLocation: '', lastSeenDateTime: '', description: '', relation: '', contactNumber: '' };
+// --- CHANGE #1: Add pinCode to the state type ---
+type FormDataState = {
+    personName: string;
+    age: string;
+    gender: string;
+    lastSeenLocation: string;
+    lastSeenDateTime: string;
+    description: string;
+    relation: string;
+    contactNumber: string;
+    pinCode: string; // Added field
+};
+
+// --- CHANGE #2: Add pinCode to the initial state ---
+const initialFormData: FormDataState = {
+    personName: '',
+    age: '',
+    gender: '',
+    lastSeenLocation: '',
+    lastSeenDateTime: '',
+    description: '',
+    relation: '',
+    contactNumber: '',
+    pinCode: '', // Added field
+};
 
 export default function SubmitReportScreen() {
     const router = useRouter();
@@ -36,12 +59,7 @@ export default function SubmitReportScreen() {
 
     useFocusEffect(
       useCallback(() => {
-        // --- LOG 1: To see if the effect runs ---
-        console.log(`[Focus Effect Fired] Flag is currently: ${submissionSuccess.current}`);
-        
         if (submissionSuccess.current) {
-          // --- LOG 2: To confirm the form is being reset ---
-          console.log('[Focus Effect Action] Flag was true. Resetting form now.');
           resetForm();
           submissionSuccess.current = false;
         }
@@ -61,7 +79,6 @@ export default function SubmitReportScreen() {
     };
 
     const validateField = (name: keyof FormDataState, value: string) => {
-        // This function is correct, no changes needed.
         let error = '';
         switch (name) {
             case 'personName': if (!value || value.trim().length < 2) error = 'Please enter a valid full name.'; break;
@@ -72,13 +89,24 @@ export default function SubmitReportScreen() {
             case 'description': if (!value || value.trim().length < 10) error = 'Please provide a detailed description.'; break;
             case 'relation': if (!value) error = 'Please select your relationship.'; break;
             case 'contactNumber': if (!value) error = 'Contact number is required.'; else if (!/^\d{10}$/.test(value)) error = 'Please enter a valid 10-digit phone number.'; break;
+            // --- CHANGE #3: Add validation rule for pinCode ---
+            case 'pinCode':
+                if (!value) {
+                    error = 'A 6-digit PIN is required.';
+                } else if (!/^\d{6}$/.test(value)) {
+                    error = 'PIN must be exactly 6 digits.';
+                }
+                break;
         }
         setErrors(prev => ({ ...prev, [name]: error }));
         return !error;
     };
 
     const handleChange = (name: keyof FormDataState, value: string) => {
-        if (name === 'age' || name === 'contactNumber') value = value.replace(/[^0-9]/g, '');
+        // --- CHANGE #4: Ensure pinCode only accepts numbers ---
+        if (name === 'age' || name === 'contactNumber' || name === 'pinCode') {
+            value = value.replace(/[^0-9]/g, '');
+        }
         setFormData(prev => ({ ...prev, [name]: value }));
         if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
     };
@@ -105,6 +133,9 @@ export default function SubmitReportScreen() {
             formPayload.append('description', formData.description);
             formPayload.append('relationToReporter', formData.relation);
             formPayload.append('reporterContact', formData.contactNumber);
+            // --- CHANGE #5: Add pinCode to the submission payload ---
+            formPayload.append('pinCode', formData.pinCode);
+
             if (photoUri) {
                 const filename = photoUri.split('/').pop() || 'photo.jpg';
                 const fileType = filename.endsWith('png') ? 'image/png' : 'image/jpeg';
@@ -114,18 +145,12 @@ export default function SubmitReportScreen() {
             const response = await fetch(`${BACKEND_API_URL}/api/reports`, { method: 'POST', body: formPayload });
             const responseData = await response.json();
 
-            // --- THIS IS THE MOST IMPORTANT PART OF THE DEBUGGING ---
             if (response.ok) {
-                // --- LOG 3: To see if the success block is reached ---
-                console.log('[Handle Submit] Response was OK. Setting success flag to true.');
                 submissionSuccess.current = true;
                 Alert.alert('Report Submitted', responseData.msg || 'Your report has been received.',
                     [{ text: 'OK', onPress: () => router.replace('/(family)/family-dashboard') }]
                 );
             } else {
-                // --- LOG 4: To see what the error response is ---
-                console.error(`[Handle Submit] Response was NOT OK. Status: ${response.status}`);
-                console.error('Backend response data:', responseData);
                 throw new Error(responseData.msg || `Request failed with status ${response.status}`);
             }
         } catch (error) {
@@ -137,7 +162,6 @@ export default function SubmitReportScreen() {
     };
 
     return (
-        // YOUR JSX IS UNCHANGED
         <>
             <Stack.Screen options={{ title: 'Report Missing Person' }} />
             <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
@@ -189,6 +213,21 @@ export default function SubmitReportScreen() {
                 <TextInput style={[styles.input, errors.contactNumber && styles.inputError]} value={formData.contactNumber} onChangeText={(text) => handleChange('contactNumber', text)} onBlur={() => handleBlur('contactNumber')} placeholder="Enter your 10-digit contact number" keyboardType="phone-pad" placeholderTextColor="#b94e4e" maxLength={10} />
                 {errors.contactNumber && <Text style={styles.errorText}>{errors.contactNumber}</Text>}
                 
+                {/* --- CHANGE #6: Add the visible PIN Code input field to the form --- */}
+                <Text style={styles.label}>Set a 6-Digit PIN Code for this Report</Text>
+                <TextInput
+                    style={[styles.input, errors.pinCode && styles.inputError]}
+                    value={formData.pinCode}
+                    onChangeText={(text) => handleChange('pinCode', text)}
+                    onBlur={() => handleBlur('pinCode')}
+                    placeholder="Enter 6-digit PIN"
+                    placeholderTextColor="#b94e4e"
+                    keyboardType="numeric"
+                    maxLength={6}
+                    // The 'secureTextEntry' prop is omitted, so the text will be visible
+                />
+                {errors.pinCode && <Text style={styles.errorText}>{errors.pinCode}</Text>}
+
                 <Text style={styles.label}>Upload a Clear Photo of the Missing Person</Text>
                 <TouchableOpacity style={[styles.imagePicker, errors.photo && styles.imagePickerError]} onPress={handleImagePick}>
                     {photoUri ? <Image source={{ uri: photoUri }} style={styles.imagePreview} /> : <Text style={styles.imagePickerText}>Tap to upload photo</Text>}
