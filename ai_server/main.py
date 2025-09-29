@@ -5,217 +5,202 @@ import json
 import base64
 import time
 from datetime import datetime
-from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Query
+from typing import Dict, Any, List
+from fastapi import FastAPI, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles # --- ADDED ---: For serving images
+from fastapi.staticfiles import StaticFiles
 from deepface import DeepFace
 import logging
+import asyncio  # added
 
 # --- 1. Basic Logging Configuration ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- 2. Initialize the FastAPI Application ---
+# --- 2. CONFIGURATION CONSTANTS (FOR EASY TUNING) ---
+# --- NEW ---: Model choice is now a configurable variable.
+# Experiment with "ArcFace", "FaceNet", "DeepFace" for potentially better accuracy.
+MODEL_NAME = "VGG-Face"
+
+# --- NEW ---: Confidence threshold to prevent false positives.
+# A match is only considered valid if the confidence is ABOVE this value.
+# VGG-Face and FaceNet are often good around 0.75-0.80. ArcFace is stricter.
+CONFIDENCE_THRESHOLD = 0.75
+
+# --- 3. Initialize the FastAPI Application ---
 app = FastAPI(
     title="Drishti AI Face Matching API",
-    description="An API that uses DeepFace to find matches for missing persons, stores unmatched sightings, and serves report images.",
-    version="1.1.0"
+    description="Provides robust face matching, logs sightings, serves images, and provides dashboard data.",
+    version="2.2.0 (Robust)"
 )
 
-# --- 3. Configure CORS ---
+# --- 4. CORS Configuration ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
 
-# --- 4. Define Critical File Paths ---
+# --- 5. Define All Critical File Paths ---
 AI_SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.abspath(os.path.join(AI_SERVER_DIR, "..", "backend"))
-UPLOADS_DIR = os.path.join(BACKEND_DIR, "uploads") # --- ADDED ---: Main uploads folder
-DB_PATH = os.path.join(UPLOADS_DIR, "reports") # This is the database of known faces
+UPLOADS_DIR = os.path.join(BACKEND_DIR, "uploads")
+DB_PATH = os.path.join(UPLOADS_DIR, "reports")
 TEMP_UPLOAD_PATH = os.path.join(AI_SERVER_DIR, "temp_uploads")
 METADATA_PATH = os.path.join(AI_SERVER_DIR, "report_metadata.json")
-
-# --- ADDED ---: Directory for storing faces that were searched but had no match
 UNIDENTIFIED_SIGHTINGS_PATH = os.path.join(UPLOADS_DIR, "unidentified_sightings")
 
-# --- 5. Mount Static Directory for Serving Images ---
-# --- ADDED ---: This is CRITICAL for the frontend to display images.
-# It makes the entire 'backend/uploads' folder accessible at the URL '/uploads'.
-# Example: A file at backend/uploads/reports/person.jpg will be available at http://<your_ip>:8000/uploads/reports/person.jpg
+# --- 6. Mount Static Directory to Serve Images ---
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
-
-# --- 6. Helper Functions (Unchanged) ---
+# --- 7. Helper Functions ---
 def load_report_metadata() -> Dict[str, Any]:
     if os.path.exists(METADATA_PATH):
         try:
             with open(METADATA_PATH, 'r') as f: return json.load(f)
-        except Exception: pass
+        except json.JSONDecodeError: return {"reports": {}}
     return {"reports": {}}
 
-def save_report_metadata(metadata: Dict[str, Any]) -> None:
-    with open(METADATA_PATH, 'w') as f:
-        json.dump(metadata, f, indent=2, default=str)
+# NEW: synchronous helper to perform blocking DeepFace warm-up
+def warm_up_deepface(dummy_image_path: str):
+    try:
+        model = DeepFace.build_model(MODEL_NAME)
+        DeepFace.represent(
+            img_path=dummy_image_path,
+            model_name=MODEL_NAME,
+            model=model,
+            enforce_detection=False
+        )
+        logger.info("✅ DeepFace model built and warmed up.")
+    except Exception:
+        # Fallback: initialize detector (lighter) to ensure backend is ready.
+        DeepFace.extract_faces(img_path=dummy_image_path, detector_backend='mtcnn', enforce_detection=False)
+        logger.info("✅ DeepFace detector warmed up (fallback).")
 
-def generate_report_id(person_name: str, timestamp: str) -> str:
-    clean_name = person_name.lower().replace(' ', '_').replace('-', '_')
-    return f"{clean_name}_{timestamp}"
-
-
-# --- 7. Application Startup Logic ---
+# --- 8. Application Startup Logic ---
 @app.on_event("startup")
 async def startup_event():
     logger.info("Server is starting up...")
     os.makedirs(DB_PATH, exist_ok=True)
     os.makedirs(TEMP_UPLOAD_PATH, exist_ok=True)
-    os.makedirs(UNIDENTIFIED_SIGHTINGS_PATH, exist_ok=True) # --- ADDED ---
-    logger.info(f"Report database path: {DB_PATH}")
-    logger.info(f"Temporary upload path: {TEMP_UPLOAD_PATH}")
-    logger.info(f"Unidentified sightings path: {UNIDENTIFIED_SIGHTINGS_PATH}") # --- ADDED ---
-
-    if not os.path.exists(METADATA_PATH):
-        save_report_metadata({"reports": {}})
-
+    os.makedirs(UNIDENTIFIED_SIGHTINGS_PATH, exist_ok=True)
+    
     try:
         image_files = [f for f in os.listdir(DB_PATH) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
         if image_files:
             dummy_image_path = os.path.join(DB_PATH, image_files[0])
-            logger.info("Pre-building DeepFace model...")
-            DeepFace.find(img_path=dummy_image_path, db_path=DB_PATH, model_name="VGG-Face", enforce_detection=False)
-            logger.info("✅ DeepFace model built and ready.")
+            logger.info(f"Pre-building DeepFace model ({MODEL_NAME})...")
+            # Run blocking warm-up in a thread to avoid blocking the event loop
+            loop = asyncio.get_running_loop()
+            try:
+                await loop.run_in_executor(None, warm_up_deepface, dummy_image_path)
+            except asyncio.CancelledError:
+                logger.warning("Startup warm-up cancelled (server is shutting down).")
+                return
         else:
-            logger.warning("⚠️ 'reports' directory is empty. No matches can be found until reports are added.")
+            logger.warning("⚠️ 'reports' directory is empty.")
     except Exception as e:
         logger.error(f"🔴 CRITICAL: Could not pre-build DeepFace model. Error: {e}")
 
-# --- 8. API Endpoints ---
+# --- 9. API ENDPOINTS ---
 
-@app.get("/")
-async def read_root():
-    return {"message": "Drishti AI Face Matching Server is online."}
-
+@app.get("/reports/recent", response_model=List[Dict[str, Any]])
+async def get_recent_reports():
+    """Provides the 5 most recent reports for the Police Dashboard."""
+    metadata = load_report_metadata()
+    reports_list = list(metadata.get("reports", {}).values())
+    reports_list.sort(key=lambda r: r.get("submitted_at", "1970-01-01T00:00:00"), reverse=True)
+    return reports_list[:5]
 
 @app.post("/find_match_react_native")
 async def find_match_react_native(file_data: str = Form(...)):
-    """
-    Endpoint for React Native. Expects a base64 encoded image data URL.
-    """
-    logger.info("Processing React Native face search request.")
+    """Receives an image from the app and performs a robust face search."""
+    temp_file_path = None
     try:
-        if 'base64,' in file_data:
-            header, base64_data = file_data.split(',', 1)
-        else:
-            # This is for safety, but React Native FileReader usually includes the header
-            base64_data = file_data
-        
+        if 'base64,' in file_data: _, base64_data = file_data.split(',', 1)
+        else: base64_data = file_data
         image_data = base64.b64decode(base64_data)
         
-        # Create a unique temporary filename
-        filename = f"rn_capture_{int(time.time())}.jpg"
+        filename = f"capture_{int(time.time())}.jpg"
         temp_file_path = os.path.join(TEMP_UPLOAD_PATH, filename)
-
-        with open(temp_file_path, "wb") as f:
-            f.write(image_data)
+        with open(temp_file_path, "wb") as f: f.write(image_data)
         
-        logger.info(f"Saved React Native image to temp path: {temp_file_path}")
-
-        # Use the common logic to find a match and handle the result
         return await process_face_match(temp_file_path, filename)
-
     except Exception as e:
-        logger.error(f"Error processing React Native upload: {e}")
+        logger.error(f"Error processing upload: {e}")
         raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")
     finally:
-        # Clean up the temporary file
-        if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+        if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
-            logger.info(f"Cleaned up temporary file: {temp_file_path}")
 
-
-# --- MODIFIED ---: This is the core logic function with the new feature
 async def process_face_match(temp_file_path: str, filename: str):
     """
-    Core face matching logic.
-    - If a match is found, it returns the report details.
-    - If NO match is found, it saves the image to the 'unidentified_sightings' folder.
+    Main logic for face matching with improved accuracy and reliability.
     """
     try:
+        # --- MODIFIED ---: enforce_detection is now True for accuracy.
+        # This will raise a ValueError if no face is found in the uploaded image.
         dfs = DeepFace.find(
             img_path=temp_file_path,
             db_path=DB_PATH,
-            enforce_detection=False, # Allows images where face detection is tricky
-            model_name="VGG-Face"
+            model_name=MODEL_NAME,
+            enforce_detection=True 
         )
 
         if not dfs or dfs[0].empty:
-            # --- THIS IS THE NEW LOGIC FOR NO-MATCH ---
-            logger.info(f"❌ No match found for '{filename}'. Storing as an unidentified sighting.")
-            
-            # Create a unique name for the unidentified sighting photo
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            sighting_filename = f"sighting_{timestamp}_{filename}"
-            destination_path = os.path.join(UNIDENTIFIED_SIGHTINGS_PATH, sighting_filename)
-            
-            # Copy the temp file to the permanent unidentified sightings folder
-            shutil.copy(temp_file_path, destination_path)
-            logger.info(f"✅ Saved unmatched photo to: {destination_path}")
+            # This case is now less likely to be reached due to enforce_detection=True,
+            # but is kept as a fallback.
+            return await handle_no_match(temp_file_path, "No similar face found in database.")
 
-            return {"match_found": False, "message": "No similar face found in the database. The sighting has been logged."}
-
-        # --- MATCH FOUND LOGIC (MODIFIED TO RETURN CORRECT URL) ---
         best_match = dfs[0].iloc[0]
-        identity_path_absolute = best_match['identity']
-        
-        # --- MODIFIED ---: Convert the absolute file path to a web-accessible URL path
-        # This is essential for the app to be able to display the image.
-        relative_path = os.path.relpath(identity_path_absolute, UPLOADS_DIR)
-        web_accessible_path = relative_path.replace("\\", "/") # Ensure forward slashes for URLs
-        
-        report_id = os.path.splitext(os.path.basename(identity_path_absolute))[0]
-        metadata = load_report_metadata()
-        report_data = metadata.get("reports", {}).get(report_id)
         confidence = 1 - float(best_match['distance'])
 
-        logger.info(f"✅ Match found for '{filename}': {report_id} with confidence {confidence:.2f}")
+        # --- NEW ---: Implementing the confidence threshold check.
+        if confidence < CONFIDENCE_THRESHOLD:
+            logger.info(f"Match found, but confidence {confidence:.2f} is below threshold of {CONFIDENCE_THRESHOLD}.")
+            return await handle_no_match(temp_file_path, "A potential match was found, but with low confidence.")
 
-        response = {
+        # If we reach here, the match is considered valid.
+        identity_path = best_match['identity']
+        relative_path = os.path.relpath(identity_path, UPLOADS_DIR).replace("\\", "/")
+        report_id = os.path.splitext(os.path.basename(identity_path))[0]
+        report_data = load_report_metadata().get("reports", {}).get(report_id, {})
+
+        logger.info(f"✅ High-confidence match found: Report ID {report_id} with confidence {confidence:.2f}")
+        return {
             "match_found": True,
             "report_id": report_id,
             "confidence": confidence,
-            # --- MODIFIED ---: Use the correct URL path
-            "file_path": f"uploads/{web_accessible_path}", 
+            "file_path": f"uploads/{relative_path}",
+            "person_name": report_data.get("person_name", "Unknown"),
+            "age": report_data.get("age", "Unknown"),
+            "gender": report_data.get("gender", "Unknown"),
+            "last_seen": report_data.get("last_seen", "Not specified"),
+            **report_data
         }
 
-        if report_data:
-            response.update({
-                "person_name": report_data.get("person_name"),
-                "age": report_data.get("age"),
-                "gender": report_data.get("gender"),
-                "last_seen": report_data.get("last_seen"),
-                "description": report_data.get("description"),
-                "reporterContact": report_data.get("reporterContact"),
-                "status": report_data.get("status"),
-                "submitted_at": report_data.get("submitted_at")
-            })
-        return response
-
     except ValueError as e:
-        logger.warning(f"Face detection error for '{filename}': {str(e)}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"Could not find a clear face in the uploaded image. Please use a clearer photo."
-        )
+        # --- IMPROVED ---: This 'except' block now handles "no face found" errors with specific messages.
+        logger.warning(f"Face detection error: {str(e)}")
+        # Check if the error message indicates no face was found.
+        if "Face could not be detected" in str(e):
+            raise HTTPException(status_code=400, detail="No face could be detected in the uploaded image. Please ensure the photo shows a clear, front-facing view of a person's face.")
+        elif "Face could not be found" in str(e):
+            raise HTTPException(status_code=400, detail="No face could be found in the uploaded image. Please use a clearer photo with better lighting.")
+        else:
+            # Handle other potential ValueErrors from the library.
+            raise HTTPException(status_code=500, detail=f"An unexpected error occurred during face analysis: {str(e)}")
 
+async def handle_no_match(temp_file_path: str, message: str):
+    """
+    A helper function to log an unidentified sighting and return a standard "no match" response.
+    """
+    sighting_filename = f"sighting_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+    destination_path = os.path.join(UNIDENTIFIED_SIGHTINGS_PATH, sighting_filename)
+    shutil.copy(temp_file_path, destination_path)
+    logger.info(f"✅ Saved unidentified sighting photo to: {destination_path}")
+    return {"match_found": False, "message": f"{message} The sighting has been logged."}
 
-# --- (You can keep all your other endpoints like /submit_report, /reports, etc. here) ---
-# ... (all other existing endpoints) ...
-
-
-# --- 9. Start the Uvicorn Server ---
+# --- 10. Start the Uvicorn Server ---
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    # FIXED: use the actual filename (Main) for the module string to avoid import issues on case-sensitive systems
+    uvicorn.run("Main:app", host="0.0.0.0", port=8000, reload=True)
