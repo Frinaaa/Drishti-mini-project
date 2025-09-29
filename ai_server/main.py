@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from deepface import DeepFace
 import logging
+import asyncio  # added
 
 # --- 1. Basic Logging Configuration ---
 logging.basicConfig(level=logging.INFO)
@@ -59,6 +60,22 @@ def load_report_metadata() -> Dict[str, Any]:
         except json.JSONDecodeError: return {"reports": {}}
     return {"reports": {}}
 
+# NEW: synchronous helper to perform blocking DeepFace warm-up
+def warm_up_deepface(dummy_image_path: str):
+    try:
+        model = DeepFace.build_model(MODEL_NAME)
+        DeepFace.represent(
+            img_path=dummy_image_path,
+            model_name=MODEL_NAME,
+            model=model,
+            enforce_detection=False
+        )
+        logger.info("✅ DeepFace model built and warmed up.")
+    except Exception:
+        # Fallback: initialize detector (lighter) to ensure backend is ready.
+        DeepFace.extract_faces(img_path=dummy_image_path, detector_backend='mtcnn', enforce_detection=False)
+        logger.info("✅ DeepFace detector warmed up (fallback).")
+
 # --- 8. Application Startup Logic ---
 @app.on_event("startup")
 async def startup_event():
@@ -72,9 +89,13 @@ async def startup_event():
         if image_files:
             dummy_image_path = os.path.join(DB_PATH, image_files[0])
             logger.info(f"Pre-building DeepFace model ({MODEL_NAME})...")
-            # For startup, enforce_detection can be False to prevent crashing if a bad image exists.
-            DeepFace.find(img_path=dummy_image_path, db_path=DB_PATH, model_name=MODEL_NAME, enforce_detection=False)
-            logger.info("✅ DeepFace model built and ready.")
+            # Run blocking warm-up in a thread to avoid blocking the event loop
+            loop = asyncio.get_running_loop()
+            try:
+                await loop.run_in_executor(None, warm_up_deepface, dummy_image_path)
+            except asyncio.CancelledError:
+                logger.warning("Startup warm-up cancelled (server is shutting down).")
+                return
         else:
             logger.warning("⚠️ 'reports' directory is empty.")
     except Exception as e:
@@ -146,19 +167,28 @@ async def process_face_match(temp_file_path: str, filename: str):
 
         logger.info(f"✅ High-confidence match found: Report ID {report_id} with confidence {confidence:.2f}")
         return {
-            "match_found": True, "report_id": report_id, "confidence": confidence,
-            "file_path": f"uploads/{relative_path}", **report_data
+            "match_found": True,
+            "report_id": report_id,
+            "confidence": confidence,
+            "file_path": f"uploads/{relative_path}",
+            "person_name": report_data.get("person_name", "Unknown"),
+            "age": report_data.get("age", "Unknown"),
+            "gender": report_data.get("gender", "Unknown"),
+            "last_seen": report_data.get("last_seen", "Not specified"),
+            **report_data
         }
 
     except ValueError as e:
-        # --- MODIFIED ---: This 'except' block is now the primary way to handle "no face found" errors.
+        # --- IMPROVED ---: This 'except' block now handles "no face found" errors with specific messages.
         logger.warning(f"Face detection error: {str(e)}")
         # Check if the error message indicates no face was found.
         if "Face could not be detected" in str(e):
-            raise HTTPException(status_code=400, detail="No face could be detected in the uploaded image. Please use a clearer, front-facing photo.")
+            raise HTTPException(status_code=400, detail="No face could be detected in the uploaded image. Please ensure the photo shows a clear, front-facing view of a person's face.")
+        elif "Face could not be found" in str(e):
+            raise HTTPException(status_code=400, detail="No face could be found in the uploaded image. Please use a clearer photo with better lighting.")
         else:
             # Handle other potential ValueErrors from the library.
-            raise HTTPException(status_code=500, detail="An unexpected error occurred during face analysis.")
+            raise HTTPException(status_code=500, detail=f"An unexpected error occurred during face analysis: {str(e)}")
 
 async def handle_no_match(temp_file_path: str, message: str):
     """
@@ -172,4 +202,5 @@ async def handle_no_match(temp_file_path: str, message: str):
 
 # --- 10. Start the Uvicorn Server ---
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    # FIXED: use the actual filename (Main) for the module string to avoid import issues on case-sensitive systems
+    uvicorn.run("Main:app", host="0.0.0.0", port=8000, reload=True)
