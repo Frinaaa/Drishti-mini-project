@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert, Platform, ScrollView, SafeAreaView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert, Platform, ScrollView, SafeAreaView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 
 import CustomButton from '@/components/CustomButton';
@@ -40,6 +39,12 @@ const showAlert = (
 
 // Helper function for web Base64 conversion (remains the same)
 const getBase64ForWebApp = (blob: Blob): Promise<string> => {
+    if (Platform.OS !== 'web') {
+        return Promise.reject(new Error('getBase64ForWebApp can only be used on web runtime.'));
+    }
+    if (typeof FileReader === 'undefined') {
+        return Promise.reject(new Error('FileReader is not available in this environment.'));
+    }
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -314,7 +319,6 @@ export default function SubmitRequestScreen() {
                     disabled={isSubmitting}
                     style={styles.submitButton}
                     textStyle={styles.submitButtonText}
-                    showActivityIndicator={isSubmitting}
                 />
             </ScrollView>
         </SafeAreaView>
