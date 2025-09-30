@@ -76,6 +76,38 @@ def warm_up_deepface(dummy_image_path: str):
         DeepFace.extract_faces(img_path=dummy_image_path, detector_backend='mtcnn', enforce_detection=False)
         logger.info("✅ DeepFace detector warmed up (fallback).")
 
+# NEW: synchronous manual search fallback that compares the query image to each DB image
+def manual_deepface_search(query_path: str, db_path: str):
+    """
+    Builds the model once and calls DeepFace.verify(query, db_image) for each image.
+    Returns (best_identity_path, best_distance) or (None, None) if no valid DB images.
+    """
+    model = None
+    best_identity = None
+    best_distance = None
+    try:
+        model = DeepFace.build_model(MODEL_NAME)
+    except Exception as e:
+        # If model can't be built, re-raise for the caller to handle
+        raise e
+
+    for fname in os.listdir(db_path):
+        if not fname.lower().endswith(('.png', '.jpg', '.jpeg')):
+            continue
+        candidate = os.path.join(db_path, fname)
+        try:
+            # verify returns dict with 'distance' for many metrics; this mirrors DeepFace.find internals
+            res = DeepFace.verify(img1=query_path, img2=candidate, model=model, model_name=MODEL_NAME, enforce_detection=False)
+            dist = float(res.get("distance", 1.0))
+            if best_distance is None or dist < best_distance:
+                best_distance = dist
+                best_identity = candidate
+        except Exception:
+            # skip problematic DB images rather than failing the whole search
+            continue
+
+    return best_identity, best_distance
+
 # --- 8. Application Startup Logic ---
 @app.on_event("startup")
 async def startup_event():
@@ -139,20 +171,37 @@ async def process_face_match(temp_file_path: str, filename: str):
     try:
         # --- MODIFIED ---: enforce_detection is now True for accuracy.
         # This will raise a ValueError if no face is found in the uploaded image.
-        dfs = DeepFace.find(
-            img_path=temp_file_path,
-            db_path=DB_PATH,
-            model_name=MODEL_NAME,
-            enforce_detection=True 
-        )
+        try:
+            dfs = DeepFace.find(
+                img_path=temp_file_path,
+                db_path=DB_PATH,
+                model_name=MODEL_NAME,
+                enforce_detection=True
+            )
+        except Exception as e:
+            # If find fails due to DataFrame construction mismatch, use manual fallback
+            err_text = str(e)
+            if "Length of values" in err_text or "length of index" in err_text:
+                logger.warning("DeepFace.find failed with DataFrame length mismatch; falling back to manual search.")
+                loop = asyncio.get_running_loop()
+                best_identity, best_distance = await loop.run_in_executor(None, manual_deepface_search, temp_file_path, DB_PATH)
+                if not best_identity:
+                    return await handle_no_match(temp_file_path, "No similar face found in database (fallback).")
+                # Build a synthetic best_match dict to reuse downstream logic
+                best_match = {"identity": best_identity, "distance": best_distance}
+            else:
+                # re-raise to be handled by outer catch
+                raise e
+        else:
+            # Normal path: DeepFace.find returned something
+            if not dfs or dfs[0].empty:
+                return await handle_no_match(temp_file_path, "No similar face found in database.")
+            best_match = dfs[0].iloc[0]
 
-        if not dfs or dfs[0].empty:
-            # This case is now less likely to be reached due to enforce_detection=True,
-            # but is kept as a fallback.
-            return await handle_no_match(temp_file_path, "No similar face found in database.")
-
-        best_match = dfs[0].iloc[0]
-        confidence = 1 - float(best_match['distance'])
+        # If best_match came from DataFrame it has indices like a pandas.Series; if from fallback it's a dict.
+        identity_path = best_match['identity'] if isinstance(best_match, dict) else best_match['identity']
+        distance_val = best_match['distance'] if isinstance(best_match, dict) else best_match['distance']
+        confidence = 1 - float(distance_val)
 
         # --- NEW ---: Implementing the confidence threshold check.
         if confidence < CONFIDENCE_THRESHOLD:
@@ -160,7 +209,6 @@ async def process_face_match(temp_file_path: str, filename: str):
             return await handle_no_match(temp_file_path, "A potential match was found, but with low confidence.")
 
         # If we reach here, the match is considered valid.
-        identity_path = best_match['identity']
         relative_path = os.path.relpath(identity_path, UPLOADS_DIR).replace("\\", "/")
         report_id = os.path.splitext(os.path.basename(identity_path))[0]
         report_data = load_report_metadata().get("reports", {}).get(report_id, {})
@@ -189,6 +237,10 @@ async def process_face_match(temp_file_path: str, filename: str):
         else:
             # Handle other potential ValueErrors from the library.
             raise HTTPException(status_code=500, detail=f"An unexpected error occurred during face analysis: {str(e)}")
+    except Exception as e:
+        # Generic fallback: return 500 with the original message
+        logger.error(f"Unexpected error during face search: {e}")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred during face analysis: {str(e)}")
 
 async def handle_no_match(temp_file_path: str, message: str):
     """
