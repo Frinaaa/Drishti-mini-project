@@ -3,7 +3,8 @@ import { View, Text, TextInput, StyleSheet, Alert, Platform, ScrollView, SafeAre
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-
+// ADD THIS LINE
+import CustomAlert from '@/components/CustomAlert';
 import CustomButton from '@/components/CustomButton';
 import { BACKEND_API_URL } from '@/config/api';
 
