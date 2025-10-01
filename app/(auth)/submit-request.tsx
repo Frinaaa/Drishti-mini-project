@@ -120,6 +120,7 @@ export default function SubmitRequestScreen() {
                 setErrors(prev => ({ ...prev, document: '' }));
             }
         } catch (error) {
+            
             console.error("Image picking error: ", error); // Added for better debugging
             Alert.alert('Error', 'An error occurred while picking the document.');
         }
