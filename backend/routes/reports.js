@@ -48,6 +48,7 @@ const transporter = nodemailer.createTransport({
 
 // @route   POST /api/reports
 // @desc    Submit a new missing person report (handles both Family and NGO submissions)
+// [MODIFIED] This route now accepts and saves the pinCode
 router.post('/', (req, res) => {
     upload(req, res, async (err) => {
         if (err) {
@@ -55,13 +56,15 @@ router.post('/', (req, res) => {
             return res.status(400).json({ msg: `File upload error: ${err.message}` });
         }
 
-        const { user, person_name, gender, age, last_seen, description, relationToReporter, reporterContact, familyEmail } = req.body;
+        // [+] Step 1: Destructure pinCode from the request body
+        const { user, person_name, gender, age, last_seen, description, relationToReporter, reporterContact, familyEmail, pinCode } = req.body;
         
         if (!req.file) {
             return res.status(400).json({ msg: 'A photo of the missing person is required.' });
         }
-        if (!user || !person_name || !gender || !age || !last_seen || !relationToReporter || !reporterContact) {
-            return res.status(400).json({ msg: 'Please provide all required text fields.' });
+        // [+] Step 2: Add pinCode to the validation check
+        if (!user || !person_name || !gender || !age || !last_seen || !relationToReporter || !reporterContact || !pinCode) {
+            return res.status(400).json({ msg: 'Please provide all required text fields, including the PIN code.' });
         }
 
         try {
@@ -71,6 +74,7 @@ router.post('/', (req, res) => {
                 user, person_name, gender, age, last_seen, description,
                 relationToReporter, reporterContact, photo_url,
                 status: 'Pending Verification',
+                pinCode, // [+] Step 3: Add the pinCode to the data object being saved
             };
 
             // Only add the familyEmail field if it was provided (meaning an NGO submitted it)
@@ -107,12 +111,31 @@ router.post('/', (req, res) => {
 // --- GET ROUTES ---
 
 // @route   GET /api/reports
-// @desc    Get all reports
+// @desc    Get all reports, with optional filtering by pinCode
+// [MODIFIED] This route now filters by pinCode if provided
 router.get('/', async (req, res) => {
     try {
-        const reports = await MissingReport.find().populate('user', 'name email').sort({ reported_at: -1 });
+        // [+] Step 1: Destructure pinCode from the request's query parameters
+        const { pinCode } = req.query;
+
+        // [+] Step 2: Create a query filter object
+        let queryFilter = {};
+
+        // [+] Step 3: If a pinCode is provided in the URL, add it to the filter
+        if (pinCode) {
+            queryFilter.pinCode = pinCode;
+        }
+
+        // [+] Step 4: Use the filter object in the find() method.
+        // If no pinCode is provided, the filter is empty ({}), and it will fetch all reports.
+        // If a pinCode is provided, it will only fetch reports matching that pinCode.
+        const reports = await MissingReport.find(queryFilter)
+            .populate('user', 'name email')
+            .sort({ reported_at: -1 });
+            
         res.json(reports);
     } catch (err) {
+        console.error('🔴 Server Error (fetching reports):', err.message);
         res.status(500).send('Server Error');
     }
 });
@@ -138,8 +161,6 @@ router.put('/verify/:id', async (req, res) => {
         const report = await MissingReport.findById(req.params.id).populate('user', 'name email');
         if (!report) { return res.status(404).json({ msg: 'Report not found.' }); }
 
-        // --- CHANGE #1: Use async/await on transporter.sendMail ---
-        // We will now wait for the email to be sent before continuing.
         if (report.familyEmail) {
             console.log(`[Email] Attempting to send verification email to: ${report.familyEmail}`);
             const mailOptions = {
@@ -149,7 +170,6 @@ router.put('/verify/:id', async (req, res) => {
                 text: `Dear Family Member,\n\nStatus: VERIFIED\n\nYour report for ${report.person_name}, submitted by NGO "${report.user.name}", has been successfully verified and is now active.`
             };
             
-            // This `await` will pause execution here until the email sends or fails.
             let info = await transporter.sendMail(mailOptions);
             console.log('✅ Verification email sent successfully:', info.response);
 
@@ -160,21 +180,20 @@ router.put('/verify/:id', async (req, res) => {
             await newNotification.save();
         }
 
-        // Now that email/notification is sent, update and save the report
         report.status = 'Verified';
         await report.save();
         
         res.json({ msg: 'Report verified. Notifications have been sent.' });
 
     } catch (err) {
-        // --- CHANGE #2: The catch block will now receive errors from sendMail ---
         console.error("🔴 [Backend Error] /api/reports/verify:", err);
         res.status(500).json({ msg: 'Server error during verification.', error: err.message });
     }
 });
 
 
-// --- THIS IS THE CORRECTED REJECT ROUTE ---
+// @route   PUT /api/reports/reject/:id
+// @desc    NGO rejects a report
 router.put('/reject/:id', async (req, res) => {
     try {
         const report = await MissingReport.findById(req.params.id).populate('user', 'name email');

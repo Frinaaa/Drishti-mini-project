@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator, Image, RefreshControl, TouchableOpacity } from 'react-native';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // [+] Import AsyncStorage
 import { BACKEND_API_URL } from '../../config/api';
 
 export default function RecentUploadsScreen() {
@@ -10,18 +11,34 @@ export default function RecentUploadsScreen() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
+    // [+] MODIFIED: fetchReports now gets the PIN code and uses it to filter
     const fetchReports = async () => {
         try {
-            const response = await fetch(`${BACKEND_API_URL}/api/reports`); 
+            // Step 1: Get the stored NGO's PIN code from async storage
+            const ngoPinCode = await AsyncStorage.getItem('userPinCode');
+
+            if (!ngoPinCode) {
+                // Handle case where PIN code is not found (e.g., not logged in as NGO)
+                throw new Error('User PIN Code not found. Please log in again.');
+            }
+
+            // Step 2: Construct the API URL with the pinCode as a query parameter
+            const apiUrl = `${BACKEND_API_URL}/api/reports?pinCode=${ngoPinCode}`;
+            
+            const response = await fetch(apiUrl); 
             const data = await response.json();
+
             if (response.ok) {
                 setReports(data);
             } else {
-                throw new Error('Failed to fetch reports');
+                // Use the error message from the backend if available
+                throw new Error(data.msg || 'Failed to fetch reports');
             }
         } catch (error) {
             console.error("Failed to fetch reports:", error);
-            Alert.alert('Error', 'Could not load recent uploads.');
+            // Display a more specific error to the user
+            Alert.alert('Error', (error instanceof Error) ? error.message : 'Could not load recent uploads.');
+            setReports([]); // Clear any existing reports on error
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -60,14 +77,12 @@ export default function RecentUploadsScreen() {
                             onPress={() => router.push({ pathname: '/(ngo)/report-detail', params: { reportId: report._id } })}
                         >
                             <Image 
-                                // [+] CONSTRUCT FULL IMAGE URL: Prepend BACKEND_API_URL
                                 source={report.photo_url ? { uri: `${BACKEND_API_URL}/${report.photo_url}` } : require('@/assets/images/story1.png')} 
                                 style={styles.reportImage} 
                             />
                             <View style={styles.reportDetails}>
                                 <Text style={styles.reportName}>{report.person_name}, {report.age}</Text>
                                 <Text style={styles.detailText}>Status: {report.status}</Text>
-                                {/* Conditionally render 'Reported by' or provide a fallback */}
                                 <Text style={styles.detailText}>
                                     Reported by: {report.user ? report.user.name : 'Unknown'}
                                 </Text>
@@ -78,7 +93,9 @@ export default function RecentUploadsScreen() {
                 ) : (
                     <View style={styles.centered}>
                         <Ionicons name="cloud-offline-outline" size={60} color="#A47171" />
-                        <Text style={styles.emptyText}>No recent reports at this time.</Text>
+                        {/* [+] MODIFIED: Updated empty state text to be more specific */}
+                        <Text style={styles.emptyText}>No reports found for your PIN code.</Text>
+                        <Text style={styles.subEmptyText}>Pull down to refresh.</Text>
                     </View>
                 )}
             </ScrollView>
@@ -89,7 +106,8 @@ export default function RecentUploadsScreen() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFBF8' },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 50 },
-    emptyText: { marginTop: 15, fontSize: 16, color: '#A47171' },
+    emptyText: { marginTop: 15, fontSize: 16, color: '#A47171', fontWeight: '600' },
+    subEmptyText: { marginTop: 5, fontSize: 14, color: '#A47171' }, // [+] Style for sub-text
     reportCard: {
         backgroundColor: '#FFFFFF',
         borderRadius: 12,

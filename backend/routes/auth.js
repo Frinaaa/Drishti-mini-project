@@ -4,10 +4,11 @@ const express = require('express');
 const router = express.Router();
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+// const bcrypt = require('bcryptjs'); // REMOVED: Hashing is disabled
+const jwt = require('jsonwebtoken'); // Kept for secure session tokens
 const { User, Role } = require('../models');
 
 // This configures how your app will send emails through your Gmail account.
-// Ensure your .env file contains EMAIL_USER and EMAIL_PASS (your 16-digit App Password).
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 587,
@@ -20,6 +21,7 @@ const transporter = nodemailer.createTransport({
 
 
 // @route   POST api/auth/signup
+// [MODIFIED] Password is now saved as plain text.
 router.post('/signup', async (req, res) => {
   const { name, email, password } = req.body;
   try {
@@ -29,67 +31,125 @@ router.post('/signup', async (req, res) => {
     const familyRole = await Role.findOne({ role_name: 'Family' });
     if (!familyRole) return res.status(500).json({ msg: 'Default role not found.' });
 
+    // Password is assigned directly without hashing
     const newUser = new User({ name, email, password, role: familyRole._id });
+    
     await newUser.save();
     res.status(201).json({ msg: 'User registered successfully' });
   } catch (err) {
     console.error("🔴 [Backend Error] /api/auth/signup:", err);
-    res.status(500).send('Server Error');
+    res.status(500).json({ msg: 'Server Error' });
   }
 });
 
 
 // @route   POST api/auth/login
+// [MODIFIED] For FAMILY login. Uses plain text password comparison.
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
     try {
         if (!email || !password) return res.status(400).json({ msg: 'Please provide email and password' });
 
         const user = await User.findOne({ email }).populate('role');
-        if (!user || password !== user.password) {
+        if (!user) {
             return res.status(400).json({ msg: 'Invalid credentials' });
         }
         
-        res.json({
-            msg: 'Login successful',
-            token: 'fake-jwt-token',
-            user: {
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                status: user.status
-            }
+        // Simple string comparison instead of bcrypt.compare
+        if (password !== user.password) {
+            return res.status(400).json({ msg: 'Invalid credentials' });
+        }
+
+        // Create JWT payload
+        const payload = { user: { id: user.id, role: user.role.role_name } };
+        
+        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '5d' }, (err, token) => {
+            if (err) throw err;
+            res.json({
+                msg: 'Login successful',
+                token,
+                user: {
+                    _id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    role: user.role,
+                    status: user.status
+                }
+            });
         });
     } catch (err) {
         console.error("🔴 [Backend Error] /api/auth/login:", err);
-        res.status(500).send('Server Error');
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+// @route   POST /api/auth/ngo-login
+// [MODIFIED] For NGO login. Uses plain text password comparison.
+router.post('/ngo-login', async (req, res) => {
+    const { email, password } = req.body;
+    try {
+        if (!email || !password) {
+            return res.status(400).json({ msg: 'Please provide email and password' });
+        }
+
+        const ngoRole = await Role.findOne({ role_name: 'NGO' });
+        if (!ngoRole) return res.status(500).json({ msg: 'NGO role not found in database.' });
+
+        const user = await User.findOne({ email, role: ngoRole._id });
+        if (!user) {
+            return res.status(400).json({ msg: 'Invalid credentials' });
+        }
+
+        // Simple string comparison instead of bcrypt.compare
+        if (password !== user.password) {
+            return res.status(400).json({ msg: 'Invalid credentials' });
+        }
+        
+        if (user.status !== 'Approved') {
+            return res.status(403).json({ msg: `Your account status is: ${user.status}. You cannot log in until it is 'Approved'.` });
+        }
+
+        const payload = { user: { id: user.id, role: 'NGO' } };
+
+        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '5d' }, (err, token) => {
+            if (err) throw err;
+            res.json({
+                msg: 'NGO login successful',
+                token,
+                user: {
+                    _id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    pinCode: user.pinCode,
+                    role: { role_name: 'NGO' },
+                    status: user.status
+                }
+            });
+        });
+
+    } catch (err) {
+        console.error("🔴 [Backend Error] /api/auth/ngo-login:", err);
+        res.status(500).json({ msg: 'Server Error' });
     }
 });
 
 
-// --- ADD THIS ENTIRE BLOCK FOR THE "FORGOT PASSWORD" FEATURE ---
-
 // @route   POST /api/auth/forgot-password
-// @desc    Generates a reset code, saves it to the user, and emails it.
+// (This route does not involve password checking, so it remains unchanged)
 router.post('/forgot-password', async (req, res) => {
     const { email } = req.body;
     try {
         const user = await User.findOne({ email });
         if (!user) {
-            // For security, we don't reveal if the email was found or not.
             return res.json({ msg: 'If an account with that email exists, a reset code has been sent.' });
         }
 
-        // Generate a random 6-digit code
         const resetCode = crypto.randomInt(100000, 999999).toString();
         
-        // Save the code and an expiration time (10 minutes) to the user's record
         user.resetPasswordCode = resetCode;
-        user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes in milliseconds
+        user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
         await user.save();
 
-        // Send the email
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: user.email,
@@ -101,43 +161,35 @@ router.post('/forgot-password', async (req, res) => {
         res.json({ msg: 'If an account with that email exists, a reset code has been sent.' });
     } catch (err) {
         console.error("🔴 [Backend Error] /forgot-password:", err);
-        res.status(500).send('Server Error');
+        res.status(500).json({ msg: 'Server Error' });
     }
 });
 
 
 // @route   POST /api/auth/reset-password
-// @desc    Verifies the reset code and updates the user's password.
-
-// --- THIS IS THE UPDATED RESET PASSWORD ROUTE ---
-// @route   POST /api/auth/reset-password
-// @desc    Verifies the code, updates the password, and sends a confirmation email.
+// [MODIFIED] Saves the new password as plain text.
 router.post('/reset-password', async (req, res) => {
     const { email, code, newPassword } = req.body;
     try {
-        // 1. Find the user only if the code matches AND it has not expired
         const user = await User.findOne({
             email,
             resetPasswordCode: code,
-            resetPasswordExpires: { $gt: Date.now() }, // Check if the code is still valid
+            resetPasswordExpires: { $gt: Date.now() },
         });
 
         if (!user) {
-            // This is a critical security check
             return res.status(400).json({ msg: 'Invalid or expired reset code. Please request a new one.' });
         }
 
-        // 2. The code is correct. Update the user's password.
-        user.password = newPassword; // IMPORTANT: In a production app, you MUST HASH this password
+        // Saves the new password directly without hashing
+        user.password = newPassword;
         
-        // 3. Invalidate the reset code so it cannot be used again
         user.resetPasswordCode = undefined;
         user.resetPasswordExpires = undefined;
         
         await user.save();
         console.log(`[Reset PW] Password successfully updated for: ${user.email}`);
 
-        // --- 4. ADDED: Send a final confirmation email to the user ---
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: user.email,
@@ -147,12 +199,11 @@ router.post('/reset-password', async (req, res) => {
         await transporter.sendMail(mailOptions);
         console.log(`[Reset PW] Confirmation email sent to: ${user.email}`);
         
-        // 5. Send the success response back to the frontend
         res.json({ msg: 'Password has been successfully reset. A confirmation email has been sent.' });
 
     } catch (err) {
         console.error("🔴 [Backend Error] /reset-password:", err);
-        res.status(500).send('Server Error');
+        res.status(500).json({ msg: 'Server Error' });
     }
 });
 

@@ -13,8 +13,27 @@ import CustomAlert from '../../components/CustomAlert';
 // --- Top-level definitions (Correctly placed) ---
 const genderOptions = ['Male', 'Female', 'Other'];
 const relationOptions = ['Parent', 'Sibling', 'Spouse', 'Child', 'Friend', 'Other Relative', 'None (NGO Report)'];
-type FormDataState = { personName: string; age: string; gender: string; lastSeenLocation: string; lastSeenDateTime: string; description: string; relation: string; contactNumber: string; familyEmail: string; };
-const initialFormData: FormDataState = { personName: '', age: '', gender: '', lastSeenLocation: '', lastSeenDateTime: '', description: '', relation: '', contactNumber: '', familyEmail: '' };
+
+// UPDATED: Added pinCode to FormDataState
+type FormDataState = {
+    personName: string;
+    age: string;
+    gender: string;
+    lastSeenLocation: string;
+    lastSeenDateTime: string;
+    description: string;
+    relation: string;
+    contactNumber: string;
+    familyEmail: string;
+    pinCode: string; // ADDED: PIN Code field
+};
+
+// UPDATED: Added pinCode to initialFormData
+const initialFormData: FormDataState = {
+    personName: '', age: '', gender: '', lastSeenLocation: '', lastSeenDateTime: '',
+    description: '', relation: '', contactNumber: '', familyEmail: '', pinCode: ''
+};
+
 type SubmissionStatus = 'idle' | 'submitting' | 'success' | 'error';
 type AlertData = { title: string; message: string; type: 'success' | 'error' | 'info' };
 
@@ -26,8 +45,24 @@ export default function SubmitReportScreen() {
     const [isRelationPickerVisible, setRelationPickerVisible] = useState(false);
     const [errors, setErrors] = useState<Partial<Record<keyof FormDataState | 'photo', string>>>({});
     const [submissionStatus, setSubmissionStatus] = useState<SubmissionStatus>('idle');
+
     const [isAlertVisible, setAlertVisible] = useState(false);
     const [alertData, setAlertData] = useState<AlertData>({ title: '', message: '', type: 'info' });
+
+    const [submissionMessage, setSubmissionMessage] = useState('');
+
+    useEffect(() => {
+        if (submissionStatus === 'success') {
+            Alert.alert('Report Submitted', submissionMessage || 'The report has been received.',
+                [{ text: 'OK', onPress: () => { router.back(); } }]
+            );
+        } else if (submissionStatus === 'error') {
+            Alert.alert('Submission Failed', submissionMessage || 'An unknown error occurred.',
+                [{ text: 'OK', onPress: () => setSubmissionStatus('idle') }]
+            );
+        }
+    }, [submissionStatus, router]); // Added router to dependency array
+
 
     const handleImagePick = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -51,15 +86,37 @@ export default function SubmitReportScreen() {
             case 'lastSeenDateTime': if (!value || value.trim().length < 3) error = 'Please enter valid date/time info.'; break;
             case 'description': if (!value || value.trim().length < 10) error = 'Please provide a detailed description.'; break;
             case 'relation': if (!value) error = 'Please select your relationship.'; break;
+
             case 'contactNumber': if (!value) { error = 'Contact number is required.'; } else if (!/^\d{10}$/.test(value)) { error = 'Please enter a valid 10-digit phone number.'; } break;
             case 'familyEmail': if (!value) { error = 'Family email is required.'; } else if (!/\S+@\S+\.\S+/.test(value)) { error = 'Please enter a valid email address.'; } break;
+
+
+            case 'contactNumber':
+                if (!value) {
+                    error = 'Contact number is required.';
+                } else if (!/^\d{10}$/.test(value)) { // Enforces EXACTLY 10 digits
+                    error = 'Please enter a valid 10-digit phone number.';
+                }
+                break;
+
+            case 'familyEmail': if (!value) error = 'Family email is required.'; else if (!/\S+@\S+\.\S+/.test(value)) error = 'Please enter a valid email address.'; break;
+            case 'pinCode': // ADDED: PIN Code validation
+                if (!value) {
+                    error = 'PIN Code is required.';
+                } else if (!/^\d{6}$/.test(value)) {
+                    error = 'PIN Code must be exactly 6 digits.';
+                }
+                break;
+
         }
         setErrors(prev => ({ ...prev, [name]: error }));
         return !error;
     };
-    
+
     const handleChange = (name: keyof FormDataState, value: string) => {
-        if (name === 'age' || name === 'contactNumber') value = value.replace(/[^0-9]/g, '');
+        if (name === 'age' || name === 'contactNumber' || name === 'pinCode') { // UPDATED: Added pinCode
+            value = value.replace(/[^0-9]/g, '');
+        }
         setFormData(prev => ({ ...prev, [name]: value }));
         if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
     };
@@ -81,11 +138,11 @@ export default function SubmitReportScreen() {
         if (!isFormValid || !isPhotoValid) return;
 
         setSubmissionStatus('submitting');
-        
+
         try {
             const userId = await AsyncStorage.getItem('userId');
             if (!userId) throw new Error('You must be logged in to submit a report.');
-            
+
             const formPayload = new FormData();
             formPayload.append('user', userId);
             formPayload.append('person_name', formData.personName);
@@ -96,7 +153,8 @@ export default function SubmitReportScreen() {
             formPayload.append('relationToReporter', formData.relation);
             formPayload.append('reporterContact', formData.contactNumber);
             formPayload.append('familyEmail', formData.familyEmail);
-            
+            formPayload.append('pinCode', formData.pinCode); // ADDED: Append PIN Code
+
             if (photoUri) {
                 const filename = photoUri.split('/').pop() || 'photo.jpg';
                 const fileType = filename.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
@@ -108,7 +166,7 @@ export default function SubmitReportScreen() {
                     formPayload.append('photo', { uri: photoUri, name: filename, type: fileType } as any);
                 }
             }
-            
+
             const response = await fetch(`${BACKEND_API_URL}/api/reports`, { method: 'POST', body: formPayload });
             const responseData = await response.json();
 
@@ -134,7 +192,7 @@ export default function SubmitReportScreen() {
                 <Text style={styles.label}>Full Name of Missing Person</Text>
                 <TextInput style={[styles.input, errors.personName && styles.inputError]} value={formData.personName} onChangeText={(text) => handleChange('personName', text)} onBlur={() => handleBlur('personName')} placeholder="Enter full name" placeholderTextColor="#b94e4e" />
                 {errors.personName && <Text style={styles.errorText}>{errors.personName}</Text>}
-                
+
                 <Text style={styles.label}>Age</Text>
                 <TextInput style={[styles.input, errors.age && styles.inputError]} value={formData.age} onChangeText={(text) => handleChange('age', text)} onBlur={() => handleBlur('age')} placeholder="Enter age" keyboardType="numeric" placeholderTextColor="#b94e4e" maxLength={3} />
                 {errors.age && <Text style={styles.errorText}>{errors.age}</Text>}
@@ -147,7 +205,7 @@ export default function SubmitReportScreen() {
                     {errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
                     {isGenderPickerVisible && <View style={styles.dropdown}>{genderOptions.map(option => (<TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { handleChange('gender', option); setGenderPickerVisible(false); }}><Text style={styles.dropdownText}>{option}</Text></TouchableOpacity>))}</View>}
                 </View>
-                
+
                 <Text style={styles.label}>Last Seen Location</Text>
                 <TextInput style={[styles.input, errors.lastSeenLocation && styles.inputError]} value={formData.lastSeenLocation} onChangeText={(text) => handleChange('lastSeenLocation', text)} onBlur={() => handleBlur('lastSeenLocation')} placeholder="Enter last seen location" placeholderTextColor="#b94e4e" />
                 {errors.lastSeenLocation && <Text style={styles.errorText}>{errors.lastSeenLocation}</Text>}
@@ -155,11 +213,11 @@ export default function SubmitReportScreen() {
                 <Text style={styles.label}>Last Seen Date & Time</Text>
                 <TextInput style={[styles.input, errors.lastSeenDateTime && styles.inputError]} value={formData.lastSeenDateTime} onChangeText={(text) => handleChange('lastSeenDateTime', text)} onBlur={() => handleBlur('lastSeenDateTime')} placeholder="e.g., Yesterday at 5 PM" placeholderTextColor="#b94e4e" />
                 {errors.lastSeenDateTime && <Text style={styles.errorText}>{errors.lastSeenDateTime}</Text>}
-                
+
                 <Text style={styles.label}>Description / Clothing / Identifiable Marks</Text>
                 <TextInput style={[styles.input, styles.textArea, errors.description && styles.inputError]} value={formData.description} onChangeText={(text) => handleChange('description', text)} onBlur={() => handleBlur('description')} multiline placeholder="Describe what the person was wearing" placeholderTextColor="#b94e4e" />
                 {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
-                
+
                 <Text style={styles.label}>Relation to Missing Person</Text>
                 <View>
                     <TouchableOpacity style={[styles.input, errors.relation && styles.inputError]} onPress={() => setRelationPickerVisible(!isRelationPickerVisible)}>
@@ -168,15 +226,44 @@ export default function SubmitReportScreen() {
                     {errors.relation && <Text style={styles.errorText}>{errors.relation}</Text>}
                     {isRelationPickerVisible && <View style={styles.dropdown}>{relationOptions.map(option => (<TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { handleChange('relation', option); setRelationPickerVisible(false); }}><Text style={styles.dropdownText}>{option}</Text></TouchableOpacity>))}</View>}
                 </View>
-                
+
                 <Text style={styles.label}>Reporter Contact Number (NGO/Family)</Text>
+
                 <TextInput style={[styles.input, errors.contactNumber && styles.inputError]} value={formData.contactNumber} onChangeText={(text) => handleChange('contactNumber', text)} onBlur={() => handleBlur('contactNumber')} placeholder="Enter your 10-digit contact number" keyboardType="phone-pad" placeholderTextColor="#b94e4e" maxLength={10} />
+
+                <TextInput
+                    style={[styles.input, errors.contactNumber && styles.inputError]}
+                    value={formData.contactNumber}
+                    onChangeText={(text) => handleChange('contactNumber', text)}
+                    onBlur={() => handleBlur('contactNumber')}
+                    placeholder="Enter your 10-digit contact number"
+                    keyboardType="phone-pad"
+                    placeholderTextColor="#b94e4e"
+                    maxLength={10}
+                />
+
                 {errors.contactNumber && <Text style={styles.errorText}>{errors.contactNumber}</Text>}
-                
+
                 <Text style={styles.label}>Family Email</Text>
                 <TextInput style={[styles.input, errors.familyEmail && styles.inputError]} value={formData.familyEmail} onChangeText={(text) => handleChange('familyEmail', text)} onBlur={() => handleBlur('familyEmail')} placeholder="Enter family email to notify them" keyboardType="email-address" autoCapitalize="none" placeholderTextColor="#b94e4e" />
                 {errors.familyEmail && <Text style={styles.errorText}>{errors.familyEmail}</Text>}
-                
+
+                {/* ADDED: PIN Code field */}
+                <Text style={styles.label}>Set a 6-Digit PIN Code for this Report</Text>
+                <TextInput
+                    style={[styles.input, errors.pinCode && styles.inputError]}
+                    value={formData.pinCode}
+                    onChangeText={(text) => handleChange('pinCode', text)}
+                    onBlur={() => handleBlur('pinCode')}
+                    placeholder="Enter 6-digit PIN"
+                    keyboardType="numeric"
+                    placeholderTextColor="#b94e4e"
+                    maxLength={6}
+                    
+                />
+                {errors.pinCode && <Text style={styles.errorText}>{errors.pinCode}</Text>}
+
+
                 <Text style={styles.label}>Upload a Clear Photo of the Missing Person</Text>
                 <TouchableOpacity style={[styles.imagePicker, errors.photo && styles.imagePickerError]} onPress={handleImagePick}>
                     {photoUri ? <Image source={{ uri: photoUri }} style={styles.imagePreview} /> : <Text style={styles.imagePickerText}>Tap to upload photo</Text>}
@@ -184,11 +271,11 @@ export default function SubmitReportScreen() {
                 {errors.photo && <Text style={styles.errorText}>{errors.photo}</Text>}
                 <Text style={styles.subLabel}>Photo is essential for AI-powered face matching.</Text>
 
-                <CustomButton 
-                    title={submissionStatus === 'submitting' ? 'Submitting...' : 'Submit Report'} 
-                    onPress={handleSubmit} 
-                    disabled={submissionStatus === 'submitting'} 
-                    style={{ marginTop: 20 }} 
+                <CustomButton
+                    title={submissionStatus === 'submitting' ? 'Submitting...' : 'Submit Report'}
+                    onPress={handleSubmit}
+                    disabled={submissionStatus === 'submitting'}
+                    style={{ marginTop: 20 }}
                 />
             </ScrollView>
             <CustomAlert
@@ -200,9 +287,14 @@ export default function SubmitReportScreen() {
             />
         </>
     );
+
 // --- THIS IS THE FIX ---
 // This closing brace `}` closes the SubmitReportScreen component function.
+
+
+
 }
+
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFBF8' },
