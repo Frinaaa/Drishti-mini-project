@@ -1,14 +1,16 @@
-// PASTE THIS ENTIRE CODE INTO YOUR (ngo)/submit-report.tsx FILE
+// app/(ngo)/submit-reports.tsx
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Alert, Image, TouchableOpacity, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, ScrollView, Image, TouchableOpacity, Platform } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import CustomButton from '../../components/CustomButton';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_API_URL } from '../../config/api';
+import CustomAlert from '../../components/CustomAlert';
 
+// --- Top-level definitions (Correctly placed) ---
 const genderOptions = ['Male', 'Female', 'Other'];
 const relationOptions = ['Parent', 'Sibling', 'Spouse', 'Child', 'Friend', 'Other Relative', 'None (NGO Report)'];
 
@@ -33,6 +35,7 @@ const initialFormData: FormDataState = {
 };
 
 type SubmissionStatus = 'idle' | 'submitting' | 'success' | 'error';
+type AlertData = { title: string; message: string; type: 'success' | 'error' | 'info' };
 
 export default function SubmitReportScreen() {
     const router = useRouter();
@@ -42,6 +45,10 @@ export default function SubmitReportScreen() {
     const [isRelationPickerVisible, setRelationPickerVisible] = useState(false);
     const [errors, setErrors] = useState<Partial<Record<keyof FormDataState | 'photo', string>>>({});
     const [submissionStatus, setSubmissionStatus] = useState<SubmissionStatus>('idle');
+
+    const [isAlertVisible, setAlertVisible] = useState(false);
+    const [alertData, setAlertData] = useState<AlertData>({ title: '', message: '', type: 'info' });
+
     const [submissionMessage, setSubmissionMessage] = useState('');
 
     useEffect(() => {
@@ -56,9 +63,10 @@ export default function SubmitReportScreen() {
         }
     }, [submissionStatus, router]); // Added router to dependency array
 
+
     const handleImagePick = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') { Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions!'); return; }
+        if (status !== 'granted') { return; }
         let result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5,
         });
@@ -79,6 +87,10 @@ export default function SubmitReportScreen() {
             case 'description': if (!value || value.trim().length < 10) error = 'Please provide a detailed description.'; break;
             case 'relation': if (!value) error = 'Please select your relationship.'; break;
 
+            case 'contactNumber': if (!value) { error = 'Contact number is required.'; } else if (!/^\d{10}$/.test(value)) { error = 'Please enter a valid 10-digit phone number.'; } break;
+            case 'familyEmail': if (!value) { error = 'Family email is required.'; } else if (!/\S+@\S+\.\S+/.test(value)) { error = 'Please enter a valid email address.'; } break;
+
+
             case 'contactNumber':
                 if (!value) {
                     error = 'Contact number is required.';
@@ -95,6 +107,7 @@ export default function SubmitReportScreen() {
                     error = 'PIN Code must be exactly 6 digits.';
                 }
                 break;
+
         }
         setErrors(prev => ({ ...prev, [name]: error }));
         return !error;
@@ -110,11 +123,19 @@ export default function SubmitReportScreen() {
 
     const handleBlur = (name: keyof FormDataState) => { validateField(name, formData[name]); };
 
+    const handleAlertClose = () => {
+        setAlertVisible(false);
+        if (submissionStatus === 'success') {
+            router.back();
+        }
+        setSubmissionStatus('idle');
+    };
+
     const handleSubmit = async () => {
         const isFormValid = (Object.keys(formData) as Array<keyof FormDataState>).every(key => validateField(key, formData[key]));
         const isPhotoValid = !!photoUri;
         if (!isPhotoValid) setErrors(prev => ({ ...prev, photo: 'A clear photo is required for submission.' }));
-        if (!isFormValid || !isPhotoValid) return Alert.alert('Incomplete Form', 'Please correct the highlighted errors before submitting.');
+        if (!isFormValid || !isPhotoValid) return;
 
         setSubmissionStatus('submitting');
 
@@ -150,15 +171,17 @@ export default function SubmitReportScreen() {
             const responseData = await response.json();
 
             if (response.ok) {
-                setSubmissionMessage(responseData.msg);
                 setSubmissionStatus('success');
+                setAlertData({ title: 'Report Submitted', message: responseData.msg, type: 'success' });
+                setAlertVisible(true);
             } else {
                 throw new Error(responseData.msg || `Request failed with status ${response.status}`);
             }
         } catch (error) {
-            const errorMessage = (error instanceof Error) ? error.message : 'Could not connect to the server.';
-            setSubmissionMessage(errorMessage);
             setSubmissionStatus('error');
+            const errorMessage = (error instanceof Error) ? error.message : 'Could not connect to the server.';
+            setAlertData({ title: 'Submission Failed', message: errorMessage, type: 'error' });
+            setAlertVisible(true);
         }
     };
 
@@ -177,10 +200,7 @@ export default function SubmitReportScreen() {
                 <Text style={styles.label}>Gender</Text>
                 <View>
                     <TouchableOpacity style={[styles.input, errors.gender && styles.inputError]} onPress={() => setGenderPickerVisible(!isGenderPickerVisible)}>
-                        <View style={styles.dropdownHeader}>
-                            <Text style={[styles.dropdownHeaderText, !formData.gender && styles.placeholderText]}>{formData.gender || 'Select gender'}</Text>
-                            <Ionicons name={isGenderPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" />
-                        </View>
+                        <View style={styles.dropdownHeader}><Text style={[styles.dropdownHeaderText, !formData.gender && styles.placeholderText]}>{formData.gender || 'Select gender'}</Text><Ionicons name={isGenderPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" /></View>
                     </TouchableOpacity>
                     {errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
                     {isGenderPickerVisible && <View style={styles.dropdown}>{genderOptions.map(option => (<TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { handleChange('gender', option); setGenderPickerVisible(false); }}><Text style={styles.dropdownText}>{option}</Text></TouchableOpacity>))}</View>}
@@ -201,16 +221,16 @@ export default function SubmitReportScreen() {
                 <Text style={styles.label}>Relation to Missing Person</Text>
                 <View>
                     <TouchableOpacity style={[styles.input, errors.relation && styles.inputError]} onPress={() => setRelationPickerVisible(!isRelationPickerVisible)}>
-                        <View style={styles.dropdownHeader}>
-                            <Text style={[styles.dropdownHeaderText, !formData.relation && styles.placeholderText]}>{formData.relation || 'Select your relationship'}</Text>
-                            <Ionicons name={isRelationPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" />
-                        </View>
+                        <View style={styles.dropdownHeader}><Text style={[styles.dropdownHeaderText, !formData.relation && styles.placeholderText]}>{formData.relation || 'Select your relationship'}</Text><Ionicons name={isRelationPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" /></View>
                     </TouchableOpacity>
                     {errors.relation && <Text style={styles.errorText}>{errors.relation}</Text>}
                     {isRelationPickerVisible && <View style={styles.dropdown}>{relationOptions.map(option => (<TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { handleChange('relation', option); setRelationPickerVisible(false); }}><Text style={styles.dropdownText}>{option}</Text></TouchableOpacity>))}</View>}
                 </View>
 
                 <Text style={styles.label}>Reporter Contact Number (NGO/Family)</Text>
+
+                <TextInput style={[styles.input, errors.contactNumber && styles.inputError]} value={formData.contactNumber} onChangeText={(text) => handleChange('contactNumber', text)} onBlur={() => handleBlur('contactNumber')} placeholder="Enter your 10-digit contact number" keyboardType="phone-pad" placeholderTextColor="#b94e4e" maxLength={10} />
+
                 <TextInput
                     style={[styles.input, errors.contactNumber && styles.inputError]}
                     value={formData.contactNumber}
@@ -221,6 +241,7 @@ export default function SubmitReportScreen() {
                     placeholderTextColor="#b94e4e"
                     maxLength={10}
                 />
+
                 {errors.contactNumber && <Text style={styles.errorText}>{errors.contactNumber}</Text>}
 
                 <Text style={styles.label}>Family Email</Text>
@@ -257,8 +278,20 @@ export default function SubmitReportScreen() {
                     style={{ marginTop: 20 }}
                 />
             </ScrollView>
+            <CustomAlert
+                visible={isAlertVisible}
+                title={alertData.title}
+                message={alertData.message}
+                type={alertData.type}
+                onClose={handleAlertClose}
+            />
         </>
     );
+
+// --- THIS IS THE FIX ---
+// This closing brace `}` closes the SubmitReportScreen component function.
+
+
 
 }
 
