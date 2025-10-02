@@ -5,7 +5,7 @@ const path = require('path');
 const { Request, User, Role, Notification } = require('../models');
 
 // --- DIRECTORY SETUP (remains the same) ---
-const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+const UPLOADS_DIR = path.join(__dirname, '..', 'uploads','request');
 if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
