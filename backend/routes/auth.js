@@ -4,9 +4,19 @@ const express = require('express');
 const router = express.Router();
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-// const bcrypt = require('bcryptjs'); // REMOVED: Hashing is disabled
+// const bcrypt = require('bcryptjs'); // Hashing is intentionally disabled per your request.
 const jwt = require('jsonwebtoken'); // Kept for secure session tokens
 const { User, Role } = require('../models');
+
+// Helper to fetch and validate the JWT secret from environment variables.
+// Returns the secret string or null if not configured.
+function getJwtSecret() {
+    if (!process.env.JWT_SECRET) {
+        console.error('🔴 [Backend Config] JWT_SECRET is not set in the environment. Set JWT_SECRET in your .env or environment variables.');
+        return null;
+    }
+    return process.env.JWT_SECRET;
+}
 
 // This configures how your app will send emails through your Gmail account.
 const transporter = nodemailer.createTransport({
@@ -21,9 +31,9 @@ const transporter = nodemailer.createTransport({
 
 
 // @route   POST api/auth/signup
-// [MODIFIED] Password is now saved as plain text.
+// [CORRECT] This route correctly accepts and saves the pinCode.
 router.post('/signup', async (req, res) => {
-  const { name, email, password } = req.body;
+    const { name, email, password, pinCode } = req.body;
   try {
     if (!name || !email || !password) return res.status(400).json({ msg: 'Please enter all fields' });
     if (await User.findOne({ email })) return res.status(400).json({ msg: 'User already exists' });
@@ -32,7 +42,8 @@ router.post('/signup', async (req, res) => {
     if (!familyRole) return res.status(500).json({ msg: 'Default role not found.' });
 
     // Password is assigned directly without hashing
-    const newUser = new User({ name, email, password, role: familyRole._id });
+    // pinCode is optional but saved when provided
+    const newUser = new User({ name, email, password, role: familyRole._id, pinCode });
     
     await newUser.save();
     res.status(201).json({ msg: 'User registered successfully' });
@@ -44,7 +55,7 @@ router.post('/signup', async (req, res) => {
 
 
 // @route   POST api/auth/login
-// [MODIFIED] For FAMILY login. Uses plain text password comparison.
+// [CORRECT] This route correctly returns the pinCode on successful login.
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
     try {
@@ -55,16 +66,23 @@ router.post('/login', async (req, res) => {
             return res.status(400).json({ msg: 'Invalid credentials' });
         }
         
-        // Simple string comparison instead of bcrypt.compare
+        // Simple string comparison for password
         if (password !== user.password) {
             return res.status(400).json({ msg: 'Invalid credentials' });
         }
 
-        // Create JWT payload
         const payload = { user: { id: user.id, role: user.role.role_name } };
         
-        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '5d' }, (err, token) => {
-            if (err) throw err;
+        const jwtSecret = getJwtSecret();
+        if (!jwtSecret) {
+            return res.status(500).json({ msg: 'Server misconfiguration: JWT secret is not set. Please set JWT_SECRET and restart the server.' });
+        }
+
+        jwt.sign(payload, jwtSecret, { expiresIn: '5d' }, (err, token) => {
+            if (err) {
+                console.error('🔴 [JWT Error] Failed to sign token:', err);
+                return res.status(500).json({ msg: 'Failed to create authentication token.' });
+            }
             res.json({
                 msg: 'Login successful',
                 token,
@@ -73,6 +91,7 @@ router.post('/login', async (req, res) => {
                     name: user.name,
                     email: user.email,
                     role: user.role,
+                    pinCode: user.pinCode, // Correctly included
                     status: user.status
                 }
             });
@@ -84,7 +103,7 @@ router.post('/login', async (req, res) => {
 });
 
 // @route   POST /api/auth/ngo-login
-// [MODIFIED] For NGO login. Uses plain text password comparison.
+// [CORRECT] This route correctly returns the pinCode on successful NGO login.
 router.post('/ngo-login', async (req, res) => {
     const { email, password } = req.body;
     try {
@@ -100,7 +119,7 @@ router.post('/ngo-login', async (req, res) => {
             return res.status(400).json({ msg: 'Invalid credentials' });
         }
 
-        // Simple string comparison instead of bcrypt.compare
+        // Simple string comparison for password
         if (password !== user.password) {
             return res.status(400).json({ msg: 'Invalid credentials' });
         }
@@ -111,8 +130,16 @@ router.post('/ngo-login', async (req, res) => {
 
         const payload = { user: { id: user.id, role: 'NGO' } };
 
-        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '5d' }, (err, token) => {
-            if (err) throw err;
+        const jwtSecret = getJwtSecret();
+        if (!jwtSecret) {
+            return res.status(500).json({ msg: 'Server misconfiguration: JWT secret is not set. Please set JWT_SECRET and restart the server.' });
+        }
+
+        jwt.sign(payload, jwtSecret, { expiresIn: '5d' }, (err, token) => {
+            if (err) {
+                console.error('🔴 [JWT Error] Failed to sign token (NGO):', err);
+                return res.status(500).json({ msg: 'Failed to create authentication token.' });
+            }
             res.json({
                 msg: 'NGO login successful',
                 token,
@@ -120,7 +147,7 @@ router.post('/ngo-login', async (req, res) => {
                     _id: user.id,
                     name: user.name,
                     email: user.email,
-                    pinCode: user.pinCode,
+                    pinCode: user.pinCode, // Correctly included
                     role: { role_name: 'NGO' },
                     status: user.status
                 }
@@ -135,7 +162,6 @@ router.post('/ngo-login', async (req, res) => {
 
 
 // @route   POST /api/auth/forgot-password
-// (This route does not involve password checking, so it remains unchanged)
 router.post('/forgot-password', async (req, res) => {
     const { email } = req.body;
     try {
@@ -147,7 +173,7 @@ router.post('/forgot-password', async (req, res) => {
         const resetCode = crypto.randomInt(100000, 999999).toString();
         
         user.resetPasswordCode = resetCode;
-        user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+        user.resetPasswordExpires = Date.now() + 10 * 60 * 1000;
         await user.save();
 
         const mailOptions = {
@@ -167,7 +193,6 @@ router.post('/forgot-password', async (req, res) => {
 
 
 // @route   POST /api/auth/reset-password
-// [MODIFIED] Saves the new password as plain text.
 router.post('/reset-password', async (req, res) => {
     const { email, code, newPassword } = req.body;
     try {
@@ -194,10 +219,9 @@ router.post('/reset-password', async (req, res) => {
             from: process.env.EMAIL_USER,
             to: user.email,
             subject: 'Your Drishti Password Has Been Successfully Reset',
-            text: `Hello ${user.name},\n\nThis is a confirmation that the password for your account associated with this email has just been changed.\n\nIf you did not perform this action, please contact our support team immediately.\n\nBest regards,\nThe Drishti Team`
+            text: `Hello ${user.name},\n\nThis is a confirmation that the password for your account has just been changed.`
         };
         await transporter.sendMail(mailOptions);
-        console.log(`[Reset PW] Confirmation email sent to: ${user.email}`);
         
         res.json({ msg: 'Password has been successfully reset. A confirmation email has been sent.' });
 

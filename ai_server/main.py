@@ -53,7 +53,7 @@ app = FastAPI(
 # --- CORS Configuration ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
+    allow_origins=[""], allow_credentials=True, allow_methods=[""], allow_headers=["*"],
 )
 
 # --- Mount Static Directory to Serve Images ---
@@ -280,10 +280,13 @@ async def live_video_stats():
         raise HTTPException(status_code=500, detail=f"Failed to get live video stats: {str(e)}")
 
 # --- Server Entry Point ---
+
 if __name__ == "__main__":
     print("===========================================")
     print("🚀 Starting Drishti Face Recognition Service v4.0.1")
     print("Features: Modular Architecture + Live Video Matching")
     print("Server will be available at: http://localhost:8000")
     print("===========================================")
+
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
