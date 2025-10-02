@@ -4,7 +4,7 @@ import shutil
 import base64
 import time
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import List, Optional, Tuple
 from fastapi import FastAPI, Form, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -13,20 +13,20 @@ import logging
 import asyncio
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent
+import cv2
+import numpy as np
+from PIL import Image, ImageEnhance
 
 # --- 1. Basic Logging Configuration ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- 2. CONFIGURATION CONSTANTS (FOR EASY TUNING) ---
-# --- NEW ---: Model choice is now a configurable variable.
-# Experiment with "ArcFace", "FaceNet", "DeepFace" for potentially better accuracy.
+# --- 2. CONFIGURATION CONSTANTS ---
 MODEL_NAME = "VGG-Face"
-
-# --- NEW ---: Confidence threshold to prevent false positives.
-# A match is only considered valid if the confidence is ABOVE this value.
-# VGG-Face and FaceNet are often good around 0.75-0.80. ArcFace is stricter.
-CONFIDENCE_THRESHOLD = 0.75
+CONFIDENCE_THRESHOLD = 0.70
+DETECTION_BACKENDS = ['retinaface', 'mtcnn', 'opencv', 'ssd']
+ENHANCE_IMAGES = True
+MAX_IMAGE_SIZE = 1024
 
 # --- 3. Initialize the FastAPI Application ---
 app = FastAPI(
@@ -63,7 +63,60 @@ db_state = DatabaseState()
 # --- 6. Mount Static Directory to Serve Images ---
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
-# --- 7. Helper Functions ---
+# --- 7. Image Processing Functions ---
+def enhance_image(image_path: str) -> str:
+    """Enhanced image processing for better face detection."""
+    try:
+        img = cv2.imread(image_path)
+        if img is None:
+            return image_path
+        
+        # Resize if too large
+        height, width = img.shape[:2]
+        if max(height, width) > MAX_IMAGE_SIZE:
+            ratio = MAX_IMAGE_SIZE / max(height, width)
+            new_size = (int(width * ratio), int(height * ratio))
+            img = cv2.resize(img, new_size)
+        
+        # Apply CLAHE for better contrast
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        lab[:,:,0] = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8)).apply(lab[:,:,0])
+        img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+        
+        # Noise reduction
+        img = cv2.bilateralFilter(img, 9, 75, 75)
+        
+        enhanced_path = image_path.replace('.jpg', '_enhanced.jpg')
+        cv2.imwrite(enhanced_path, img)
+        return enhanced_path
+        
+    except Exception as e:
+        logger.warning(f"Enhancement failed: {e}")
+        return image_path
+
+def find_best_backend(image_path: str) -> str:
+    """Find the best detection backend for the given image."""
+    for backend in DETECTION_BACKENDS:
+        try:
+            DeepFace.verify(
+                img1=image_path, img2=image_path,
+                model_name=MODEL_NAME, detector_backend=backend,
+                enforce_detection=True, silent=True
+            )
+            return backend
+        except Exception:
+            continue
+    return 'opencv'  # fallback
+
+def cleanup_temp_files(file_path: str):
+    """Clean up temporary files."""
+    try:
+        if '_enhanced.jpg' in file_path and os.path.exists(file_path):
+            os.remove(file_path)
+    except Exception:
+        pass
+
+# --- 8. Helper Functions ---
 def get_image_files(directory: str) -> List[str]:
     """Get all image files in the directory"""
     if not os.path.exists(directory):
@@ -193,79 +246,57 @@ def get_or_build_model():
         logger.info("✅ Model built and cached.")
     return db_state.model
 
-def optimized_search(query_path: str, db_path: str):
-    """
-    Fast search using pre-built DeepFace database (pickle file).
-    Falls back to manual search if pickle file has issues.
-    """
+def search_face(query_path: str, db_path: str) -> Tuple[Optional[str], Optional[float]]:
+    """Optimized face search with fallback mechanisms."""
+    backend = find_best_backend(query_path)
     pickle_file = get_pickle_file()
     
+    # Try fast database search first
     if pickle_file:
-        # Try using the pre-built database first (fastest method)
         try:
             result = DeepFace.find(
-                img_path=query_path,
-                db_path=db_path,
-                model_name=MODEL_NAME,
-                enforce_detection=False,
-                silent=True
+                img_path=query_path, db_path=db_path,
+                model_name=MODEL_NAME, detector_backend=backend,
+                enforce_detection=False, silent=True
             )
             
             if result and len(result) > 0 and not result[0].empty:
                 best_match = result[0].iloc[0]
-                best_identity = best_match['identity']
-                best_distance = best_match['distance']
-                logger.info(f"⚡ Fast match: {os.path.basename(best_identity)} (distance: {best_distance:.4f})")
-                return best_identity, best_distance
-            else:
-                logger.info("🔍 No match found in database")
-                return None, None
+                identity = best_match['identity']
+                distance = best_match['distance']
+                logger.info(f"⚡ Match found: {os.path.basename(identity)} (distance: {distance:.4f})")
+                return identity, distance
                 
         except Exception as e:
-            logger.warning(f"⚠️ Pickle search failed, falling back to manual: {str(e)[:100]}")
-            # Fall through to manual search
+            logger.warning(f"Database search failed: {str(e)[:100]}")
     
-    # Fallback: Manual search with cached model
-    return manual_search_fallback(query_path, db_path)
+    # Fallback to manual search
+    return manual_search(query_path, db_path, backend)
 
-def manual_search_fallback(query_path: str, db_path: str):
-    """
-    Manual search using cached model (fallback when pickle fails).
-    """
-    best_identity = None
-    best_distance = None
-    
-    try:
-        model = get_or_build_model()
-    except Exception as e:
-        logger.error(f"Failed to build model: {e}")
-        raise e
-
+def manual_search(query_path: str, db_path: str, backend: str) -> Tuple[Optional[str], Optional[float]]:
+    """Manual face comparison search."""
+    best_identity, best_distance = None, None
+    model = get_or_build_model()
     images = get_image_files(db_path)
+    
     logger.info(f"🔍 Manual search through {len(images)} images...")
     
     for fname in images:
         candidate = os.path.join(db_path, fname)
         try:
             res = DeepFace.verify(
-                img1=query_path, 
-                img2=candidate, 
-                model_name=MODEL_NAME,
-                model=model,
-                enforce_detection=False,
+                img1=query_path, img2=candidate,
+                model_name=MODEL_NAME, model=model,
+                detector_backend=backend, enforce_detection=False,
                 distance_metric="cosine"
             )
-            dist = float(res.get("distance", 1.0))
-            if best_distance is None or dist < best_distance:
-                best_distance = dist
+            distance = float(res.get("distance", 1.0))
+            if best_distance is None or distance < best_distance:
+                best_distance = distance
                 best_identity = candidate
-        except Exception as e:
-            # Skip problematic images
-            logger.debug(f"Skipped {fname}: {str(e)[:50]}")
-            continue
-
-    if best_identity:
-        logger.info(f"✅ Manual match: {os.path.basename(best_identity)} (distance: {best_distance:.4f})")
+                
+        except Exception:
+            continue  # Skip problematic images
     
     return best_identity, best_distance
 
@@ -378,65 +409,72 @@ async def find_match_react_native(file_data: str = Form(...)):
             os.remove(temp_file_path)
 
 async def process_face_match(temp_file_path: str, filename: str):
-    """
-    Optimized face matching using cached database and model.
-    """
+    """Process face matching with enhanced detection."""
+    enhanced_path = None
+    
     try:
-        # Quick check if database is ready
+        # Ensure database is ready
         if not get_pickle_file() and get_image_files(DB_PATH):
-            logger.info("⚠️ Database not ready, building now...")
             await update_database_async()
         
-        # Use optimized search with pre-built database
+        # Enhance image if enabled
+        search_path = temp_file_path
+        if ENHANCE_IMAGES:
+            loop = asyncio.get_running_loop()
+            enhanced_path = await loop.run_in_executor(None, enhance_image, temp_file_path)
+            
+            # Use enhanced version if face detection works
+            backend = find_best_backend(enhanced_path)
+            if backend != 'opencv':  # If enhanced version works better
+                search_path = enhanced_path
+            else:
+                cleanup_temp_files(enhanced_path)
+                enhanced_path = None
+        
+        # Search for matches
         logger.info(f"🔍 Searching against {db_state.image_count} images...")
         loop = asyncio.get_running_loop()
-        best_identity, best_distance = await loop.run_in_executor(
-            None, 
-            optimized_search, 
-            temp_file_path, 
-            DB_PATH
+        identity, distance = await loop.run_in_executor(
+            None, search_face, search_path, DB_PATH
         )
         
-        if not best_identity:
+        if not identity:
             return await handle_no_match(temp_file_path, "No similar face found in database.")
         
-        identity_path = best_identity
-        distance_val = best_distance
-        confidence = 1 - float(distance_val)
-
-        # --- NEW ---: Implementing the confidence threshold check.
+        confidence = 1 - float(distance)
         if confidence < CONFIDENCE_THRESHOLD:
-            logger.info(f"Match found, but confidence {confidence:.2f} is below threshold of {CONFIDENCE_THRESHOLD}.")
-            return await handle_no_match(temp_file_path, "A potential match was found, but with low confidence.")
-
-        # If we reach here, the match is considered valid.
-        relative_path = os.path.relpath(identity_path, UPLOADS_DIR).replace("\\", "/")
-        matched_filename = os.path.basename(identity_path)
-
-        logger.info(f"✅ High-confidence match found: {matched_filename} with confidence {confidence:.2f}")
+            logger.info(f"Low confidence match: {confidence:.2f} < {CONFIDENCE_THRESHOLD}")
+            return await handle_no_match(temp_file_path, "Match found but confidence too low.")
+        
+        # Return successful match
+        matched_filename = os.path.basename(identity)
+        relative_path = os.path.relpath(identity, UPLOADS_DIR).replace("\\", "/")
+        
+        logger.info(f"✅ Match found: {matched_filename} (confidence: {confidence:.2f})")
+        
         return {
             "match_found": True,
-            "matched_image": matched_filename,  # Return filename for Node.js to lookup details
-            "confidence": confidence,
+            "confidence": round(confidence, 3),
+            "distance": round(distance, 4),
+            "matched_image": matched_filename,
             "file_path": f"uploads/{relative_path}",
-            "distance": distance_val
+            "message": f"Match found with {confidence*100:.1f}% confidence"
         }
-
+        
     except ValueError as e:
-        # --- IMPROVED ---: This 'except' block now handles "no face found" errors with specific messages.
-        logger.warning(f"Face detection error: {str(e)}")
-        # Check if the error message indicates no face was found.
-        if "Face could not be detected" in str(e):
-            raise HTTPException(status_code=400, detail="No face could be detected in the uploaded image. Please ensure the photo shows a clear, front-facing view of a person's face.")
-        elif "Face could not be found" in str(e):
-            raise HTTPException(status_code=400, detail="No face could be found in the uploaded image. Please use a clearer photo with better lighting.")
-        else:
-            # Handle other potential ValueErrors from the library.
-            raise HTTPException(status_code=500, detail=f"An unexpected error occurred during face analysis: {str(e)}")
+        error_msg = str(e).lower()
+        if "face could not be detected" in error_msg:
+            detail = "No face detected. Please ensure clear lighting and face visibility."
+            raise HTTPException(status_code=400, detail=detail)
+        raise HTTPException(status_code=500, detail=f"Face analysis error: {str(e)}")
+        
     except Exception as e:
-        # Generic fallback: return 500 with the original message
-        logger.error(f"Unexpected error during face search: {e}")
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred during face analysis: {str(e)}")
+        logger.error(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=f"Processing error: {str(e)}")
+        
+    finally:
+        if enhanced_path:
+            cleanup_temp_files(enhanced_path)
 
 async def handle_no_match(temp_file_path: str, message: str):
     """
@@ -497,12 +535,14 @@ async def database_stats():
             "pickle_files": pickle_files,
             "model_name": MODEL_NAME,
             "confidence_threshold": CONFIDENCE_THRESHOLD,
+            "detection_backends": DETECTION_BACKENDS,
+            "image_enhancement": ENHANCE_IMAGES,
             "needs_rebuild": should_rebuild_database()
         }
     except Exception as e:
         logger.error(f"Error getting database stats: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get database stats: {str(e)}")
 
-# --- 10. Start the Uvicorn Server ---
+# --- 10. Start the Uvicorn Server ---a
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

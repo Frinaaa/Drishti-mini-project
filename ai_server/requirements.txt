@@ -5,3 +5,6 @@ deepface
 tensorflow # DeepFace relies on this
 Pillow
 gdown
+opencv-python # For advanced image processing
+numpy # For array operations
+watchdog # For file system monitoring
