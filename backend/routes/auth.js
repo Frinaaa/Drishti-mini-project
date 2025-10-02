@@ -105,7 +105,7 @@ router.post('/ngo-login', async (req, res) => {
             return res.status(400).json({ msg: 'Invalid credentials' });
         }
         
-        if (user.status !== 'Approved') {
+        if (user.status !== 'Active') {
             return res.status(403).json({ msg: `Your account status is: ${user.status}. You cannot log in until it is 'Approved'.` });
         }
 

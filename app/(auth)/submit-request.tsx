@@ -8,57 +8,18 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  // --- CORRECTED LINE: Added Alert for native fallbacks ---
+  Alert, 
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
-// ADD THIS LINE
-import CustomAlert from "@/components/CustomAlert";
+import CustomAlert from "@/components/CustomAlert"; // Your custom alert component
 import CustomButton from "@/components/CustomButton";
-import { BACKEND_API_URL } from "@/config/api";
+import { API_URL as BACKEND_API_URL } from "@/config/api"; // Renamed for consistency
 
-// --- [NEW] Cross-Platform Alert Helper Function ---
-/**
- * Displays an alert. On web, it uses the browser's `alert()`.
- * On native, it uses React Native's `Alert.alert()`.
- * It also handles simple `onPress` callbacks for the web.
- * @param title The title of the alert.
- * @param message The message body.
- * @param buttons An array of buttons (primarily for native).
- */
-const showAlert = (
-  title: string,
-  message?: string,
-  buttons?: Array<{ text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }>
-) => {
-  if (Platform.OS === 'web') {
-    // Combine title and message for the browser's simple alert.
-    const webMessage = message ? `${title}\n\n${message}` : title;
-    alert(webMessage);
-    // If there's an `onPress` action (like for a success redirect), trigger it.
-    // This simulates the user clicking "OK".
-    if (buttons && buttons.length > 0 && buttons[0].onPress) {
-      buttons[0].onPress();
-    }
-  } else {
-    // Use the standard native Alert API.
-    Alert.alert(title, message, buttons);
-  }
-};
-
-
-// Helper function for web Base64 conversion (remains the same)
+// Helper function for web Base64 conversion
 const getBase64ForWebApp = (blob: Blob): Promise<string> => {
-  if (Platform.OS !== "web") {
-    return Promise.reject(
-      new Error("getBase64ForWebApp can only be used on web runtime.")
-    );
-  }
-  if (typeof FileReader === "undefined") {
-    return Promise.reject(
-      new Error("FileReader is not available in this environment.")
-    );
-  }
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -72,10 +33,9 @@ const getBase64ForWebApp = (blob: Blob): Promise<string> => {
 };
 
 export default function SubmitRequestScreen() {
-
   const router = useRouter();
 
-  // Unified state for form data
+  // --- CORRECTED: Single, unified state for all form data, including pinCode ---
   const [formData, setFormData] = useState({
     ngoName: "",
     registrationId: "",
@@ -84,9 +44,10 @@ export default function SubmitRequestScreen() {
     email: "",
     location: "",
     password: "",
+    pinCode: "", // Added pinCode here
   });
 
-  // State for validation errors and UI
+  // --- CORRECTED: Single, unified state for errors and UI ---
   const [errors, setErrors] = useState<
     Partial<typeof formData> & { document?: string }
   >({});
@@ -96,87 +57,7 @@ export default function SubmitRequestScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
-    const router = useRouter();
-
-    // Unified state for form data
-    const [formData, setFormData] = useState({
-        ngoName: '',
-        registrationId: '',
-        description: '',
-        contactNumber: '',
-        email: '',
-        location: '',
-        password: '',
-        pinCode: '',
-    });
-
-    // State for validation errors and UI
-    const [errors, setErrors] = useState<Partial<typeof formData> & { document?: string }>({});
-    const [document, setDocument] = useState<ImagePicker.ImagePickerAsset | null>(null);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-
-    // General-purpose validation function
-    const validateField = (name: keyof typeof formData, value: string) => {
-        let error = '';
-        switch (name) {
-            case 'ngoName':
-                if (!value) error = 'NGO Name is required.';
-                break;
-            case 'registrationId':
-                if (!value) error = 'Registration ID is required.';
-                break;
-            case 'description':
-                if (!value) error = 'A brief description is required.';
-                break;
-            case 'location':
-                if (!value) error = 'Location is required.';
-                break;
-            case 'email':
-                if (!value) {
-                    error = 'Email address is required.';
-                } else if (!/\S+@\S+\.\S+/.test(value)) {
-                    error = 'Please enter a valid email address.';
-                }
-                break;
-            case 'contactNumber':
-                if (!value) {
-                    error = 'Contact number is required.';
-                } else if (!/^\d{10}$/.test(value)) {
-                    error = 'Contact number must be 10 digits.';
-                }
-                break;
-            case 'password':
-                if (!value) {
-                    error = 'Password is required.';
-                } else if (value.length < 6) {
-                    error = 'Password must be at least 6 characters long.';
-                }
-                break;
-            case 'pinCode':
-                if (!value) {
-                    error = 'PIN Code is required.';
-                } else if (!/^\d{6}$/.test(value)) {
-                    error = 'PIN Code must be exactly 6 digits.';
-                }
-                break;
-        }
-        setErrors(prev => ({ ...prev, [name]: error }));
-        return !error;
-    };
-
-    const handleChange = (name: keyof typeof formData, value: string) => {
-        if (name === 'pinCode' || name === 'contactNumber') {
-            value = value.replace(/[^0-9]/g, '');
-        }
-        setFormData(prev => ({ ...prev, [name]: value }));
-        if (errors[name]) {
-            setErrors(prev => ({ ...prev, [name]: '' }));
-        }
-    };
-
-
-  // CustomAlert state
+  // --- CORRECTED: Single, unified state for your CustomAlert component ---
   const [alert, setAlert] = useState({
     visible: false,
     title: "",
@@ -192,47 +73,37 @@ export default function SubmitRequestScreen() {
     setAlert({ visible: true, title, message, type });
   };
 
-
   const hideAlert = () => {
     setAlert((prev) => ({ ...prev, visible: false }));
+    // If the submission was successful, navigate away after closing the alert
+    if (alert.type === 'success') {
+        router.replace("/(auth)/ngo-login");
+    }
   };
 
-  // General-purpose validation function
+  // --- CORRECTED: Single, unified validation function ---
   const validateField = (name: keyof typeof formData, value: string) => {
     let error = "";
     switch (name) {
-      case "ngoName":
-        if (!value) error = "NGO Name is required.";
-        break;
-      case "registrationId":
-        if (!value) error = "Registration ID is required.";
-        break;
-      case "description":
-        if (!value) error = "A brief description is required.";
-        break;
-      case "location":
-        if (!value) error = "Location is required.";
-        break;
+      case "ngoName": if (!value) error = "NGO Name is required."; break;
+      case "registrationId": if (!value) error = "Registration ID is required."; break;
+      case "description": if (!value) error = "A brief description is required."; break;
+      case "location": if (!value) error = "Location is required."; break;
       case "email":
-        if (!value) {
-          error = "Email address is required.";
-        } else if (!/\S+@\S+\.\S+/.test(value)) {
-          error = "Please enter a valid email address.";
-        }
+        if (!value) error = "Email address is required.";
+        else if (!/\S+@\S+\.\S+/.test(value)) error = "Please enter a valid email address.";
         break;
       case "contactNumber":
-        if (!value) {
-          error = "Contact number is required.";
-        } else if (!/^\d{10}$/.test(value)) {
-          error = "Contact number must be 10 digits.";
-        }
+        if (!value) error = "Contact number is required.";
+        else if (!/^\d{10}$/.test(value)) error = "Contact number must be 10 digits.";
         break;
       case "password":
-        if (!value) {
-          error = "Password is required.";
-        } else if (value.length < 6) {
-          error = "Password must be at least 6 characters long.";
-        }
+        if (!value) error = "Password is required.";
+        else if (value.length < 6) error = "Password must be at least 6 characters long.";
+        break;
+      case "pinCode": // Added pinCode validation
+        if (!value) error = "PIN Code is required.";
+        else if (!/^\d{6}$/.test(value)) error = "PIN Code must be exactly 6 digits.";
         break;
     }
     setErrors((prev) => ({ ...prev, [name]: error }));
@@ -240,52 +111,16 @@ export default function SubmitRequestScreen() {
   };
 
   const handleChange = (name: keyof typeof formData, value: string) => {
+    // Sanitize numeric inputs
+    if (name === 'pinCode' || name === 'contactNumber') {
+        value = value.replace(/[^0-9]/g, '');
+    }
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
   };
-
-    const pickDocument = async () => {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-            // [MODIFIED] Use the cross-platform showAlert
-            showAlert('Permission Denied', 'We need access to your photo library to upload documents.');
-            return;
-        }
-        try {
-            const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                quality: 0.8,
-                base64: true,
-            });
-            if (!result.canceled && result.assets) {
-                setDocument(result.assets[0]);
-                setErrors(prev => ({ ...prev, document: '' }));
-            }
-        } catch (error) {
-            console.error("Image picking error: ", error);
-            // [MODIFIED] Use the cross-platform showAlert
-            showAlert('Error', 'An error occurred while picking the document.');
-        }
-    };
-
-    const resetForm = () => {
-        setFormData({
-            ngoName: '', registrationId: '', description: '',
-            contactNumber: '', email: '', location: '', password: '',
-            pinCode: '',
-        });
-        setDocument(null);
-        setErrors({});
-    };
-
-    const handleSubmit = async () => {
-        const isFormValid = Object.keys(formData).every(key =>
-            validateField(key as keyof typeof formData, formData[key as keyof typeof formData])
-        );
-
-
+  
   const handleBlur = (name: keyof typeof formData) => {
     validateField(name, formData[name]);
   };
@@ -293,91 +128,58 @@ export default function SubmitRequestScreen() {
   const pickDocument = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      showAlert(
-        "Permission Denied",
-        "We need access to your photo library to upload documents.",
-        "error"
-      );
+      showAlert("Permission Denied", "We need access to your photo library to upload documents.", "error");
       return;
     }
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
-        // --- CHANGE #1: Request the base64 data directly from the picker ---
-        // This is the most reliable way to get the file data on native.
-        base64: true,
+        base64: true, // Request base64 directly for native platforms
       });
       if (!result.canceled && result.assets) {
         setDocument(result.assets[0]);
         setErrors((prev) => ({ ...prev, document: "" }));
       }
     } catch (error) {
-      console.error("Image picking error: ", error); // Added for better debugging
-      showAlert(
-        "Error",
-        "An error occurred while picking the document.",
-        "error"
-      );
+      console.error("Image picking error: ", error);
+      showAlert("Error", "An error occurred while picking the document.", "error");
     }
   };
 
   const resetForm = () => {
     setFormData({
-      ngoName: "",
-      registrationId: "",
-      description: "",
-      contactNumber: "",
-      email: "",
-      location: "",
-      password: "",
+      ngoName: "", registrationId: "", description: "", contactNumber: "",
+      email: "", location: "", password: "", pinCode: "",
     });
     setDocument(null);
     setErrors({});
   };
 
-
   const handleSubmit = async () => {
-    const isFormValid = Object.keys(formData).every((key) =>
-      validateField(
-        key as keyof typeof formData,
-        formData[key as keyof typeof formData]
-      )
+    const isFormValid = (Object.keys(formData) as Array<keyof typeof formData>).every((key) =>
+      validateField(key, formData[key])
     );
-
     const isDocValid = !!document;
     if (!isDocValid) {
-      setErrors((prev) => ({
-        ...prev,
-        document: "Registration proof document is required.",
-      }));
+      setErrors((prev) => ({ ...prev, document: "Registration proof document is required." }));
     }
 
     if (!isFormValid || !isDocValid) {
-      return showAlert(
-        "Invalid Information",
-        "Please correct the errors before submitting.",
-        "error"
-      );
+      return showAlert("Invalid Information", "Please correct the errors before submitting.", "error");
     }
 
     setIsSubmitting(true);
     try {
       let base64String = "";
 
-      // --- CHANGE #2: Simplify the base64 retrieval logic ---
       if (Platform.OS === "web") {
-        // Web logic remains the same, as it works correctly
         const response = await fetch(document!.uri);
         const blob = await response.blob();
         base64String = await getBase64ForWebApp(blob);
       } else {
-        // For native (iOS/Android), use the base64 string we requested in pickDocument
-        // This avoids using FileSystem.readAsStringAsync and potential URI issues.
         if (!document?.base64) {
-          throw new Error(
-            "Failed to get Base64 data from the selected document. Please try picking the document again."
-          );
+          throw new Error("Failed to get Base64 data from the document. Please try picking it again.");
         }
         base64String = document.base64;
       }
@@ -387,34 +189,22 @@ export default function SubmitRequestScreen() {
         fileName: document!.fileName || "document.jpg",
       };
 
-      const response = await fetch(
-        `${BACKEND_API_URL}/api/requests/submit-for-registration`,
-        {
+      const response = await fetch(`${BACKEND_API_URL}/api/requests/submit-for-registration`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...formData, documentData }),
         }
       );
-
       const responseData = await response.json();
 
       if (response.ok) {
         showAlert("Success", responseData.msg, "success");
         resetForm();
-        setTimeout(() => {
-          hideAlert();
-          router.replace("/(auth)/ngo-login");
-        }, 2000);
       } else {
-        throw new Error(
-          responseData.msg || "An unknown server error occurred."
-        );
+        throw new Error(responseData.msg || "An unknown server error occurred.");
       }
     } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "An unexpected error occurred.";
+      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
       showAlert("Submission Failed", errorMessage, "error");
     } finally {
       setIsSubmitting(false);
@@ -430,390 +220,75 @@ export default function SubmitRequestScreen() {
       >
         <Text style={styles.header}>Request NGO Account</Text>
 
-        <TextInput
-          style={[styles.input, errors.ngoName && styles.inputError]}
-          placeholder="NGO Name"
-          placeholderTextColor="#b94e4e"
-          value={formData.ngoName}
-          onChangeText={(val) => handleChange("ngoName", val)}
-          onBlur={() => handleBlur("ngoName")}
-        />
-        {errors.ngoName && (
-          <Text style={styles.errorText}>{errors.ngoName}</Text>
-        )}
+        <TextInput style={[styles.input, errors.ngoName && styles.inputError]} placeholder="NGO Name" placeholderTextColor="#b94e4e" value={formData.ngoName} onChangeText={(val) => handleChange("ngoName", val)} onBlur={() => handleBlur("ngoName")} />
+        {errors.ngoName && (<Text style={styles.errorText}>{errors.ngoName}</Text>)}
 
-        <TextInput
-          style={[styles.input, errors.registrationId && styles.inputError]}
-          placeholder="NGO ID/Registration Number"
-          placeholderTextColor="#b94e4e"
-          value={formData.registrationId}
-          onChangeText={(val) => handleChange("registrationId", val)}
-          onBlur={() => handleBlur("registrationId")}
-        />
-        {errors.registrationId && (
-          <Text style={styles.errorText}>{errors.registrationId}</Text>
-        )}
+        <TextInput style={[styles.input, errors.registrationId && styles.inputError]} placeholder="NGO ID/Registration Number" placeholderTextColor="#b94e4e" value={formData.registrationId} onChangeText={(val) => handleChange("registrationId", val)} onBlur={() => handleBlur("registrationId")} />
+        {errors.registrationId && (<Text style={styles.errorText}>{errors.registrationId}</Text>)}
 
-        <TextInput
-          style={[
-            styles.input,
-            styles.textArea,
-            errors.description && styles.inputError,
-          ]}
-          placeholder="Brief Description of NGO's Work"
-          placeholderTextColor="#b94e4e"
-          multiline
-          value={formData.description}
-          onChangeText={(val) => handleChange("description", val)}
-          onBlur={() => handleBlur("description")}
-        />
-        {errors.description && (
-          <Text style={styles.errorText}>{errors.description}</Text>
-        )}
+        <TextInput style={[styles.input, styles.textArea, errors.description && styles.inputError]} placeholder="Brief Description of NGO's Work" placeholderTextColor="#b94e4e" multiline value={formData.description} onChangeText={(val) => handleChange("description", val)} onBlur={() => handleBlur("description")} />
+        {errors.description && (<Text style={styles.errorText}>{errors.description}</Text>)}
 
-        <TextInput
-          style={[styles.input, errors.contactNumber && styles.inputError]}
-          placeholder="Contact Number (10 digits)"
-          placeholderTextColor="#b94e4e"
-          value={formData.contactNumber}
-          onChangeText={(val) => handleChange("contactNumber", val)}
-          onBlur={() => handleBlur("contactNumber")}
-          keyboardType="phone-pad"
-          maxLength={10}
-        />
-        {errors.contactNumber && (
-          <Text style={styles.errorText}>{errors.contactNumber}</Text>
-        )}
+        <TextInput style={[styles.input, errors.contactNumber && styles.inputError]} placeholder="Contact Number (10 digits)" placeholderTextColor="#b94e4e" value={formData.contactNumber} onChangeText={(val) => handleChange("contactNumber", val)} onBlur={() => handleBlur("contactNumber")} keyboardType="phone-pad" maxLength={10} />
+        {errors.contactNumber && (<Text style={styles.errorText}>{errors.contactNumber}</Text>)}
 
-        <TextInput
-          style={[styles.input, errors.email && styles.inputError]}
-          placeholder="Email Address for Login"
-          placeholderTextColor="#b94e4e"
-          value={formData.email}
-          onChangeText={(val) => handleChange("email", val)}
-          onBlur={() => handleBlur("email")}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+        <TextInput style={[styles.input, errors.email && styles.inputError]} placeholder="Email Address for Login" placeholderTextColor="#b94e4e" value={formData.email} onChangeText={(val) => handleChange("email", val)} onBlur={() => handleBlur("email")} keyboardType="email-address" autoCapitalize="none" />
+        {errors.email && (<Text style={styles.errorText}>{errors.email}</Text>)}
 
-        <TextInput
-          style={[styles.input, errors.location && styles.inputError]}
-          placeholder="Location/Region of Operation"
-          placeholderTextColor="#b94e4e"
-          value={formData.location}
-          onChangeText={(val) => handleChange("location", val)}
-          onBlur={() => handleBlur("location")}
-        />
-        {errors.location && (
-          <Text style={styles.errorText}>{errors.location}</Text>
-        )}
+        <TextInput style={[styles.input, errors.location && styles.inputError]} placeholder="Location/Region of Operation" placeholderTextColor="#b94e4e" value={formData.location} onChangeText={(val) => handleChange("location", val)} onBlur={() => handleBlur("location")} />
+        {errors.location && (<Text style={styles.errorText}>{errors.location}</Text>)}
 
-        <View
-          style={[
-            styles.input,
-            styles.passwordContainer,
-            errors.password && styles.inputError,
-          ]}
-        >
-          <TextInput
-            style={styles.passwordInput}
-            placeholder="Set Account Password"
-            placeholderTextColor="#b94e4e"
-            value={formData.password}
-            onChangeText={(val) => handleChange("password", val)}
-            onBlur={() => handleBlur("password")}
-            secureTextEntry={!isPasswordVisible}
-          />
-          <TouchableOpacity
-            onPress={() => setIsPasswordVisible((prev) => !prev)}
-          >
-            <Ionicons
-              name={isPasswordVisible ? "eye-off" : "eye"}
-              size={24}
-              color="#850a0a"
-            />
+        <View style={[styles.input, styles.passwordContainer, errors.password && styles.inputError]}>
+          <TextInput style={styles.passwordInput} placeholder="Set Account Password" placeholderTextColor="#b94e4e" value={formData.password} onChangeText={(val) => handleChange("password", val)} onBlur={() => handleBlur("password")} secureTextEntry={!isPasswordVisible} />
+          <TouchableOpacity onPress={() => setIsPasswordVisible((prev) => !prev)}>
+            <Ionicons name={isPasswordVisible ? "eye-off" : "eye"} size={24} color="#850a0a" />
           </TouchableOpacity>
         </View>
-        {errors.password && (
-          <Text style={styles.errorText}>{errors.password}</Text>
-        )}
+        {errors.password && (<Text style={styles.errorText}>{errors.password}</Text>)}
+        
+        {/* --- CORRECTED: Unified TextInput for PIN Code --- */}
+        <TextInput style={[styles.input, errors.pinCode && styles.inputError]} placeholder="Set 6-digit PIN Code" placeholderTextColor="#b94e4e" value={formData.pinCode} onChangeText={(val) => handleChange('pinCode', val)} onBlur={() => handleBlur('pinCode')} keyboardType="numeric" maxLength={6} secureTextEntry />
+        {errors.pinCode && (<Text style={styles.errorText}>{errors.pinCode}</Text>)}
 
         {!document ? (
-          <TouchableOpacity
-            style={[styles.uploadButton, errors.document && styles.inputError]}
-            onPress={pickDocument}
-          >
+          <TouchableOpacity style={[styles.uploadButton, errors.document && styles.inputError]} onPress={pickDocument}>
             <Ionicons name="cloud-upload-outline" size={24} color="#FFFFFF" />
-            <Text style={styles.uploadButtonText}>
-              Upload Registration Proof
-            </Text>
+            <Text style={styles.uploadButtonText}>Upload Registration Proof</Text>
           </TouchableOpacity>
         ) : (
-          <View
-            style={[
-              styles.fileDisplayContainer,
-              errors.document && styles.inputError,
-            ]}
-          >
-            <Ionicons
-              name="document-attach-outline"
-              size={24}
-              color="#3A0000"
-            />
-            <Text style={styles.fileNameText} numberOfLines={1}>
-              {document.fileName}
-            </Text>
+          <View style={[styles.fileDisplayContainer, errors.document && styles.inputError]}>
+            <Ionicons name="document-attach-outline" size={24} color="#3A0000" />
+            <Text style={styles.fileNameText} numberOfLines={1}>{document.fileName || 'document.jpg'}</Text>
             <TouchableOpacity onPress={() => setDocument(null)}>
               <Ionicons name="close-circle" size={24} color="#850a0a" />
             </TouchableOpacity>
           </View>
         )}
-        {errors.document && (
-          <Text style={styles.errorText}>{errors.document}</Text>
-        )}
+        {errors.document && (<Text style={styles.errorText}>{errors.document}</Text>)}
 
-        <CustomButton
-          title={isSubmitting ? "Submitting..." : "Submit for Verification"}
-          onPress={handleSubmit}
-          disabled={isSubmitting}
-          style={styles.submitButton}
-          textStyle={styles.submitButtonText}
-        />
+        <CustomButton title={isSubmitting ? "Submitting..." : "Submit for Verification"} onPress={handleSubmit} disabled={isSubmitting} style={styles.submitButton} textStyle={styles.submitButtonText} />
       </ScrollView>
 
-      <CustomAlert
-        visible={alert.visible}
-        title={alert.title}
-        message={alert.message}
-        type={alert.type}
-        onClose={hideAlert}
-      />
+      <CustomAlert visible={alert.visible} title={alert.title} message={alert.message} type={alert.type} onClose={hideAlert} />
     </SafeAreaView>
   );
 }
 
-        if (!isFormValid || !isDocValid) {
-            // [MODIFIED] Use the cross-platform showAlert
-            return showAlert('Invalid Information', 'Please correct the errors before submitting.');
-        }
-
-        setIsSubmitting(true);
-        try {
-            let base64String = '';
-
-            if (Platform.OS === 'web') {
-                const response = await fetch(document!.uri);
-                const blob = await response.blob();
-                base64String = await getBase64ForWebApp(blob);
-            } else {
-                if (!document?.base64) {
-                    throw new Error("Failed to get Base64 data from the selected document. Please try picking the document again.");
-                }
-                base64String = document.base64;
-            }
-
-            const documentData = {
-                fileBase64: base64String,
-                fileName: document!.fileName || 'document.jpg'
-            };
-
-            const response = await fetch(`${BACKEND_API_URL}/api/requests/submit-for-registration`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...formData, documentData }),
-            });
-
-            const responseData = await response.json();
-
-            if (response.ok) {
-                // [MODIFIED] Use the cross-platform showAlert
-                showAlert(
-                    'Success',
-                    responseData.msg,
-                    [{
-                        text: 'OK', onPress: () => {
-                            resetForm();
-                            router.replace('/(auth)/ngo-login');
-                        }
-                    }]
-                );
-            } else {
-                throw new Error(responseData.msg || 'An unknown server error occurred.');
-            }
-        } catch (error) {
-            const errorMessage = (error instanceof Error) ? error.message : 'An unexpected error occurred.';
-            // [MODIFIED] Use the cross-platform showAlert
-            showAlert('Submission Failed', errorMessage);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    return (
-        <SafeAreaView style={styles.safeArea}>
-            <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-                <Text style={styles.header}>Request NGO Account</Text>
-
-                <TextInput style={[styles.input, errors.ngoName && styles.inputError]} placeholder="NGO Name" placeholderTextColor="#b94e4e" value={formData.ngoName} onChangeText={(val) => handleChange('ngoName', val)} onBlur={() => handleBlur('ngoName')} />
-                {errors.ngoName && <Text style={styles.errorText}>{errors.ngoName}</Text>}
-
-                <TextInput style={[styles.input, errors.registrationId && styles.inputError]} placeholder="NGO ID/Registration Number" placeholderTextColor="#b94e4e" value={formData.registrationId} onChangeText={(val) => handleChange('registrationId', val)} onBlur={() => handleBlur('registrationId')} />
-                {errors.registrationId && <Text style={styles.errorText}>{errors.registrationId}</Text>}
-
-                <TextInput style={[styles.input, styles.textArea, errors.description && styles.inputError]} placeholder="Brief Description of NGO's Work" placeholderTextColor="#b94e4e" multiline value={formData.description} onChangeText={(val) => handleChange('description', val)} onBlur={() => handleBlur('description')} />
-                {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
-
-                <TextInput style={[styles.input, errors.contactNumber && styles.inputError]} placeholder="Contact Number (10 digits)" placeholderTextColor="#b94e4e" value={formData.contactNumber} onChangeText={(val) => handleChange('contactNumber', val)} onBlur={() => handleBlur('contactNumber')} keyboardType="phone-pad" maxLength={10} />
-                {errors.contactNumber && <Text style={styles.errorText}>{errors.contactNumber}</Text>}
-
-                <TextInput style={[styles.input, errors.email && styles.inputError]} placeholder="Email Address for Login" placeholderTextColor="#b94e4e" value={formData.email} onChangeText={(val) => handleChange('email', val)} onBlur={() => handleBlur('email')} keyboardType="email-address" autoCapitalize="none" />
-                {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
-
-                <TextInput style={[styles.input, errors.location && styles.inputError]} placeholder="Location/Region of Operation" placeholderTextColor="#b94e4e" value={formData.location} onChangeText={(val) => handleChange('location', val)} onBlur={() => handleBlur('location')} />
-                {errors.location && <Text style={styles.errorText}>{errors.location}</Text>}
-
-                <View style={[styles.input, styles.passwordContainer, errors.password && styles.inputError]}>
-                    <TextInput
-                        style={styles.passwordInput}
-                        placeholder="Set Account Password"
-                        placeholderTextColor="#b94e4e"
-                        value={formData.password}
-                        onChangeText={(val) => handleChange('password', val)}
-                        onBlur={() => handleBlur('password')}
-                        secureTextEntry={!isPasswordVisible}
-                    />
-                    <TouchableOpacity onPress={() => setIsPasswordVisible(prev => !prev)}>
-                        <Ionicons name={isPasswordVisible ? 'eye-off' : 'eye'} size={24} color="#850a0a" />
-                    </TouchableOpacity>
-                </View>
-                {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
-
-                <View style={[styles.input, errors.pinCode && styles.inputError]}>
-                    <TextInput
-                        style={styles.passwordInput}
-                        placeholder="Set 6-digit PIN Code"
-                        placeholderTextColor="#b94e4e"
-                        value={formData.pinCode}
-                        onChangeText={(val) => handleChange('pinCode', val)}
-                        onBlur={() => handleBlur('pinCode')}
-                        // Note: secureTextEntry is missing. Add secureTextEntry={true} if you want the PIN to be masked.
-                        keyboardType="numeric"
-                        maxLength={6}
-                    />
-                </View>
-                {errors.pinCode && <Text style={styles.errorText}>{errors.pinCode}</Text>}
-
-
-                {!document ? (
-                    <TouchableOpacity style={[styles.uploadButton, errors.document && styles.inputError]} onPress={pickDocument}>
-                        <Ionicons name="cloud-upload-outline" size={24} color="#FFFFFF" />
-                        <Text style={styles.uploadButtonText}>Upload Registration Proof</Text>
-                    </TouchableOpacity>
-                ) : (
-                    <View style={[styles.fileDisplayContainer, errors.document && styles.inputError]}>
-                        <Ionicons name="document-attach-outline" size={24} color="#3A0000" />
-                        <Text style={styles.fileNameText} numberOfLines={1}>{document.fileName}</Text>
-                        <TouchableOpacity onPress={() => setDocument(null)}>
-                            <Ionicons name="close-circle" size={24} color="#850a0a" />
-                        </TouchableOpacity>
-                    </View>
-                )}
-                {errors.document && <Text style={styles.errorText}>{errors.document}</Text>}
-
-                <CustomButton
-                    title={isSubmitting ? "Submitting..." : "Submit for Verification"}
-                    onPress={handleSubmit}
-                    disabled={isSubmitting}
-                    style={styles.submitButton}
-                    textStyle={styles.submitButtonText}
-                />
-            </ScrollView>
-        </SafeAreaView>
-    );
-
-};
-
-
-// Styles remain unchanged
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#FFFBF8" },
   container: { flex: 1 },
   scrollContent: { padding: 20 },
-  header: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#3A0000",
-    textAlign: "center",
-    marginBottom: 30,
-  },
-  input: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#F0E0E0",
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    fontSize: 16,
-    marginBottom: 15,
-    color: "#3A0000",
-    height: 55,
-    justifyContent: "center",
-  },
+  header: { fontSize: 24, fontWeight: "bold", color: "#3A0000", textAlign: "center", marginBottom: 30 },
+  input: { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#F0E0E0", borderRadius: 10, paddingHorizontal: 15, fontSize: 16, marginBottom: 15, color: "#3A0000", height: 55, justifyContent: "center" },
   textArea: { height: 120, textAlignVertical: "top", paddingVertical: 15 },
-  passwordContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  passwordContainer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   passwordInput: { flex: 1, height: "100%", color: "#3A0000" },
-  uploadButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#850a0a",
-    borderRadius: 10,
-    padding: 15,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    borderWidth: 1,
-    borderColor: "transparent",
-    height: 55,
-  },
-  uploadButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-    marginLeft: 10,
-  },
-  fileDisplayContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#F0E0E0",
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    height: 55,
-    marginBottom: 15,
-  },
+  uploadButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#850a0a", borderRadius: 10, padding: 15, elevation: 2, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 3, borderWidth: 1, borderColor: "transparent", height: 55 },
+  uploadButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600", marginLeft: 10 },
+  fileDisplayContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#F0E0E0", borderRadius: 10, paddingHorizontal: 15, height: 55, marginBottom: 15 },
   fileNameText: { flex: 1, marginLeft: 10, color: "#3A0000", fontSize: 16 },
-  submitButton: {
-    backgroundColor: "#850a0a",
-    paddingVertical: 18,
-    marginTop: 20,
-  },
+  submitButton: { backgroundColor: "#850a0a", paddingVertical: 18, marginTop: 20 },
   submitButtonText: { color: "#FFFFFF", fontWeight: "bold" },
-  inputError: {
-    borderColor: "#D32F2F",
-    borderWidth: 1.5,
-  },
-  errorText: {
-    color: "#D32F2F",
-    fontSize: 12,
-    marginBottom: 10,
-    marginTop: -10,
-    paddingLeft: 5,
-  },
+  inputError: { borderColor: "#D32F2F", borderWidth: 1.5 },
+  errorText: { color: "#D32F2F", fontSize: 12, marginBottom: 10, marginTop: -10, paddingLeft: 5 },
 });
