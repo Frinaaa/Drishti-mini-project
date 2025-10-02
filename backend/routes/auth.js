@@ -8,6 +8,16 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken'); // Kept for secure session tokens
 const { User, Role } = require('../models');
 
+// Helper to fetch and validate the JWT secret from environment variables.
+// Returns the secret string or null if not configured.
+function getJwtSecret() {
+    if (!process.env.JWT_SECRET) {
+        console.error('🔴 [Backend Config] JWT_SECRET is not set in the environment. Set JWT_SECRET in your .env or environment variables.');
+        return null;
+    }
+    return process.env.JWT_SECRET;
+}
+
 // This configures how your app will send emails through your Gmail account.
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
@@ -23,7 +33,7 @@ const transporter = nodemailer.createTransport({
 // @route   POST api/auth/signup
 // [MODIFIED] Password is now saved as plain text.
 router.post('/signup', async (req, res) => {
-  const { name, email, password } = req.body;
+    const { name, email, password, pinCode } = req.body;
   try {
     if (!name || !email || !password) return res.status(400).json({ msg: 'Please enter all fields' });
     if (await User.findOne({ email })) return res.status(400).json({ msg: 'User already exists' });
@@ -32,7 +42,8 @@ router.post('/signup', async (req, res) => {
     if (!familyRole) return res.status(500).json({ msg: 'Default role not found.' });
 
     // Password is assigned directly without hashing
-    const newUser = new User({ name, email, password, role: familyRole._id });
+    // pinCode is optional but saved when provided
+    const newUser = new User({ name, email, password, role: familyRole._id, pinCode });
     
     await newUser.save();
     res.status(201).json({ msg: 'User registered successfully' });
@@ -63,8 +74,16 @@ router.post('/login', async (req, res) => {
         // Create JWT payload
         const payload = { user: { id: user.id, role: user.role.role_name } };
         
-        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '5d' }, (err, token) => {
-            if (err) throw err;
+        const jwtSecret = getJwtSecret();
+        if (!jwtSecret) {
+            return res.status(500).json({ msg: 'Server misconfiguration: JWT secret is not set. Please set JWT_SECRET and restart the server.' });
+        }
+
+        jwt.sign(payload, jwtSecret, { expiresIn: '5d' }, (err, token) => {
+            if (err) {
+                console.error('🔴 [JWT Error] Failed to sign token:', err);
+                return res.status(500).json({ msg: 'Failed to create authentication token.' });
+            }
             res.json({
                 msg: 'Login successful',
                 token,
@@ -73,6 +92,7 @@ router.post('/login', async (req, res) => {
                     name: user.name,
                     email: user.email,
                     role: user.role,
+                    pinCode: user.pinCode,
                     status: user.status
                 }
             });
@@ -105,14 +125,22 @@ router.post('/ngo-login', async (req, res) => {
             return res.status(400).json({ msg: 'Invalid credentials' });
         }
         
-        if (user.status !== 'Approved') {
+        if (user.status !== 'Active') {
             return res.status(403).json({ msg: `Your account status is: ${user.status}. You cannot log in until it is 'Approved'.` });
         }
 
         const payload = { user: { id: user.id, role: 'NGO' } };
 
-        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '5d' }, (err, token) => {
-            if (err) throw err;
+        const jwtSecret = getJwtSecret();
+        if (!jwtSecret) {
+            return res.status(500).json({ msg: 'Server misconfiguration: JWT secret is not set. Please set JWT_SECRET and restart the server.' });
+        }
+
+        jwt.sign(payload, jwtSecret, { expiresIn: '5d' }, (err, token) => {
+            if (err) {
+                console.error('🔴 [JWT Error] Failed to sign token (NGO):', err);
+                return res.status(500).json({ msg: 'Failed to create authentication token.' });
+            }
             res.json({
                 msg: 'NGO login successful',
                 token,

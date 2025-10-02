@@ -14,6 +14,7 @@ const UserSchema = new Schema({
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     role: { type: Schema.Types.ObjectId, ref: 'Role', required: true },
+    pinCode: { type: String },
     profile_photo: { type: String, default: null },
     status: {
         type: String,
