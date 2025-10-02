@@ -42,7 +42,7 @@ try {
         }
 
         // Navigate to dashboard
-        router.replace('/(ngo)/recent-uploads');
+        router.replace('/(ngo)/ngo-dashboard');
     } else {
         throw new Error(responseData.msg || 'Login failed');
     }

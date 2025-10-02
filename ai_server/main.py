@@ -9,49 +9,18 @@ from fastapi import FastAPI, Form, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import logging
-<<<<<<< HEAD
-import asyncio  # added
-from typing import Optional
-import subprocess
-import sys
-=======
 import asyncio
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent
 import cv2
 import numpy as np
 from PIL import Image, ImageEnhance
->>>>>>> 5410907501c60f32e1b8b553375d5fbaa7c14614
 
 # --- 1. Basic Logging Configuration ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-<<<<<<< HEAD
-# Will hold the original import error if DeepFace (or TensorFlow) fails to import.
-DEEPFACE_IMPORT_ERROR: Optional[Exception] = None
-
-def import_deepface():
-    """Attempt to import DeepFace lazily. If it fails, store the error and return None.
-
-    This prevents the whole app from crashing at import time on systems missing
-    native DLLs (for example, the MSVC runtime required by TensorFlow).
-    """
-    global DEEPFACE_IMPORT_ERROR
-    try:
-        from deepface import DeepFace  # type: ignore
-        return DeepFace
-    except Exception as e:
-        DEEPFACE_IMPORT_ERROR = e
-        logger.error(f"DeepFace import failed: {e}")
-        return None
-
-# --- 2. CONFIGURATION CONSTANTS (FOR EASY TUNING) ---
-# --- NEW ---: Model choice is now a configurable variable.
-# Experiment with "ArcFace", "FaceNet", "DeepFace" for potentially better accuracy.
-=======
 # --- 2. CONFIGURATION CONSTANTS ---
->>>>>>> 5410907501c60f32e1b8b553375d5fbaa7c14614
 MODEL_NAME = "VGG-Face"
 CONFIDENCE_THRESHOLD = 0.70
 DETECTION_BACKENDS = ['retinaface', 'mtcnn', 'opencv', 'ssd']
@@ -93,39 +62,6 @@ db_state = DatabaseState()
 # --- 6. Mount Static Directory to Serve Images ---
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
-<<<<<<< HEAD
-# --- 7. Helper Functions ---
-def load_report_metadata() -> Dict[str, Any]:
-    if os.path.exists(METADATA_PATH):
-        try:
-            with open(METADATA_PATH, 'r') as f: return json.load(f)
-        except json.JSONDecodeError: return {"reports": {}}
-    return {"reports": {}}
-
-# NEW: synchronous helper to perform blocking DeepFace warm-up
-def warm_up_deepface(dummy_image_path: str):
-    DeepFace = import_deepface()
-    if DEEPFACE_IMPORT_ERROR:
-        # Re-raise here so the startup logs show the root cause clearly.
-        raise DEEPFACE_IMPORT_ERROR
-
-    try:
-        model = DeepFace.build_model(MODEL_NAME)
-        DeepFace.represent(
-            img_path=dummy_image_path,
-            model_name=MODEL_NAME,
-            model=model,
-            enforce_detection=False
-        )
-        logger.info("✅ DeepFace model built and warmed up.")
-    except Exception:
-        # Fallback: initialize detector (lighter) to ensure backend is ready.
-        try:
-            DeepFace.extract_faces(img_path=dummy_image_path, detector_backend='mtcnn', enforce_detection=False)
-            logger.info("✅ DeepFace detector warmed up (fallback).")
-        except Exception as e:
-            logger.warning(f"DeepFace warm-up fallback failed: {e}")
-=======
 # --- 7. Image Processing Functions ---
 def enhance_image(image_path: str) -> str:
     """Enhanced image processing for better face detection."""
@@ -388,7 +324,6 @@ class ReportsFileHandler(FileSystemEventHandler):
 
 # Global observer
 file_observer = None
->>>>>>> 5410907501c60f32e1b8b553375d5fbaa7c14614
 
 @app.on_event("startup")
 async def startup_event():
@@ -477,67 +412,6 @@ async def process_face_match(temp_file_path: str, filename: str):
     enhanced_path = None
     
     try:
-<<<<<<< HEAD
-        DeepFace = import_deepface()
-        if DEEPFACE_IMPORT_ERROR or DeepFace is None:
-            # Return a helpful message to the client rather than crashing the server.
-            logger.error(f"DeepFace unavailable at runtime: {DEEPFACE_IMPORT_ERROR}")
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "Face-matching is temporarily unavailable on the server because a required native dependency is missing. "
-                    "On Windows, install the Microsoft C++ Redistributable (2015-2019) and ensure the installation directory is in your PATH. "
-                    "See https://support.microsoft.com/help/2977003/the-latest-supported-visual-c-downloads for details."
-                )
-            )
-
-        # --- MODIFIED ---: enforce_detection is now True for accuracy.
-        # This will raise a ValueError if no face is found in the uploaded image.
-        # Use a subprocess worker to run DeepFace.find so that heavy native libraries
-        # (TensorFlow) don't block or crash the main event loop. We also enforce a
-        # timeout to avoid very long-running requests that cause client AbortErrors.
-
-        worker_path = os.path.join(AI_SERVER_DIR, 'deepface_worker.py')
-        cmd = [sys.executable, worker_path, temp_file_path, DB_PATH, MODEL_NAME, str(CONFIDENCE_THRESHOLD)]
-
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30.0)
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
-            logger.error('DeepFace worker timed out')
-            return await handle_no_match(temp_file_path, 'Face search timed out. Please try again.')
-
-        if proc.returncode != 0 and not stdout:
-            err = stderr.decode(errors='ignore') if stderr else 'Unknown error'
-            logger.error(f'DeepFace worker failed: {err}')
-            return await handle_no_match(temp_file_path, 'Face search failed due to server error.')
-
-        out_text = stdout.decode(errors='ignore')
-        try:
-            result = json.loads(out_text)
-        except Exception as e:
-            logger.error(f'Failed to parse worker output: {e} -- output: {out_text}')
-            return await handle_no_match(temp_file_path, 'Face search failed (invalid worker output).')
-
-        if result.get('status') == 'no_match':
-            return await handle_no_match(temp_file_path, 'No similar face found in database.')
-        if result.get('status') == 'error':
-            logger.error(f"Worker reported error: {result.get('error')}")
-            return await handle_no_match(temp_file_path, 'Face search failed due to server error.')
-
-        # status == 'match'
-        confidence = float(result.get('confidence', 0.0))
-        identity_path = result.get('identity')
-
-        # --- NEW ---: Implementing the confidence threshold check.
-=======
         # Ensure database is ready
         if not get_pickle_file() and get_image_files(DB_PATH):
             await update_database_async()
@@ -567,7 +441,6 @@ async def process_face_match(temp_file_path: str, filename: str):
             return await handle_no_match(temp_file_path, "No similar face found in database.")
         
         confidence = 1 - float(distance)
->>>>>>> 5410907501c60f32e1b8b553375d5fbaa7c14614
         if confidence < CONFIDENCE_THRESHOLD:
             logger.info(f"Low confidence match: {confidence:.2f} < {CONFIDENCE_THRESHOLD}")
             return await handle_no_match(temp_file_path, "Match found but confidence too low.")
@@ -671,8 +544,4 @@ async def database_stats():
 
 # --- 10. Start the Uvicorn Server ---a
 if __name__ == "__main__":
-<<<<<<< HEAD
-    # Run the app directly. Use the lowercase module path matching this file name.
-=======
->>>>>>> 5410907501c60f32e1b8b553375d5fbaa7c14614
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

@@ -1,7 +1,8 @@
 // app/(ngo)/submit-reports.tsx
 
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Image, TouchableOpacity, Platform } from 'react-native';
+// --- FIX: Import useEffect from 'react' ---
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, ScrollView, Image, TouchableOpacity, Platform, Alert } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import CustomButton from '../../components/CustomButton';
 import * as ImagePicker from 'expo-image-picker';
@@ -10,11 +11,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_API_URL } from '../../config/api';
 import CustomAlert from '../../components/CustomAlert';
 
-// --- Top-level definitions (Correctly placed) ---
+// --- Top-level definitions ---
 const genderOptions = ['Male', 'Female', 'Other'];
 const relationOptions = ['Parent', 'Sibling', 'Spouse', 'Child', 'Friend', 'Other Relative', 'None (NGO Report)'];
 
-// UPDATED: Added pinCode to FormDataState
 type FormDataState = {
     personName: string;
     age: string;
@@ -25,10 +25,9 @@ type FormDataState = {
     relation: string;
     contactNumber: string;
     familyEmail: string;
-    pinCode: string; // ADDED: PIN Code field
+    pinCode: string;
 };
 
-// UPDATED: Added pinCode to initialFormData
 const initialFormData: FormDataState = {
     personName: '', age: '', gender: '', lastSeenLocation: '', lastSeenDateTime: '',
     description: '', relation: '', contactNumber: '', familyEmail: '', pinCode: ''
@@ -45,28 +44,25 @@ export default function SubmitReportScreen() {
     const [isRelationPickerVisible, setRelationPickerVisible] = useState(false);
     const [errors, setErrors] = useState<Partial<Record<keyof FormDataState | 'photo', string>>>({});
     const [submissionStatus, setSubmissionStatus] = useState<SubmissionStatus>('idle');
-
     const [isAlertVisible, setAlertVisible] = useState(false);
     const [alertData, setAlertData] = useState<AlertData>({ title: '', message: '', type: 'info' });
 
-    const [submissionMessage, setSubmissionMessage] = useState('');
-
+    // This useEffect was causing the error because it wasn't imported.
+    // It's also using the native Alert, which doesn't work on web.
+    // We will replace its logic inside the handleSubmit function.
     useEffect(() => {
-        if (submissionStatus === 'success') {
-            Alert.alert('Report Submitted', submissionMessage || 'The report has been received.',
-                [{ text: 'OK', onPress: () => { router.back(); } }]
-            );
-        } else if (submissionStatus === 'error') {
-            Alert.alert('Submission Failed', submissionMessage || 'An unknown error occurred.',
-                [{ text: 'OK', onPress: () => setSubmissionStatus('idle') }]
-            );
-        }
-    }, [submissionStatus, router]); // Added router to dependency array
+        // This block is now handled by the CustomAlert logic in handleSubmit.
+        // Keeping this here for reference, but it can be removed.
+        console.log("Submission status changed:", submissionStatus);
+    }, [submissionStatus]);
 
 
     const handleImagePick = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') { return; }
+        if (status !== 'granted') {
+            Alert.alert('Permission Denied', 'Camera roll access is needed to upload a photo.');
+            return;
+        }
         let result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5,
         });
@@ -76,6 +72,7 @@ export default function SubmitReportScreen() {
         }
     };
 
+    // --- FIX: Single, clean validateField function ---
     const validateField = (name: keyof FormDataState, value: string) => {
         let error = '';
         switch (name) {
@@ -86,35 +83,16 @@ export default function SubmitReportScreen() {
             case 'lastSeenDateTime': if (!value || value.trim().length < 3) error = 'Please enter valid date/time info.'; break;
             case 'description': if (!value || value.trim().length < 10) error = 'Please provide a detailed description.'; break;
             case 'relation': if (!value) error = 'Please select your relationship.'; break;
-
             case 'contactNumber': if (!value) { error = 'Contact number is required.'; } else if (!/^\d{10}$/.test(value)) { error = 'Please enter a valid 10-digit phone number.'; } break;
             case 'familyEmail': if (!value) { error = 'Family email is required.'; } else if (!/\S+@\S+\.\S+/.test(value)) { error = 'Please enter a valid email address.'; } break;
-
-
-            case 'contactNumber':
-                if (!value) {
-                    error = 'Contact number is required.';
-                } else if (!/^\d{10}$/.test(value)) { // Enforces EXACTLY 10 digits
-                    error = 'Please enter a valid 10-digit phone number.';
-                }
-                break;
-
-            case 'familyEmail': if (!value) error = 'Family email is required.'; else if (!/\S+@\S+\.\S+/.test(value)) error = 'Please enter a valid email address.'; break;
-            case 'pinCode': // ADDED: PIN Code validation
-                if (!value) {
-                    error = 'PIN Code is required.';
-                } else if (!/^\d{6}$/.test(value)) {
-                    error = 'PIN Code must be exactly 6 digits.';
-                }
-                break;
-
+            case 'pinCode': if (!value) { error = 'PIN Code is required.'; } else if (!/^\d{6}$/.test(value)) { error = 'PIN Code must be exactly 6 digits.'; } break;
         }
         setErrors(prev => ({ ...prev, [name]: error }));
         return !error;
     };
 
     const handleChange = (name: keyof FormDataState, value: string) => {
-        if (name === 'age' || name === 'contactNumber' || name === 'pinCode') { // UPDATED: Added pinCode
+        if (name === 'age' || name === 'contactNumber' || name === 'pinCode') {
             value = value.replace(/[^0-9]/g, '');
         }
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -135,7 +113,12 @@ export default function SubmitReportScreen() {
         const isFormValid = (Object.keys(formData) as Array<keyof FormDataState>).every(key => validateField(key, formData[key]));
         const isPhotoValid = !!photoUri;
         if (!isPhotoValid) setErrors(prev => ({ ...prev, photo: 'A clear photo is required for submission.' }));
-        if (!isFormValid || !isPhotoValid) return;
+        
+        if (!isFormValid || !isPhotoValid) {
+            setAlertData({ title: 'Incomplete Form', message: 'Please correct the highlighted errors before submitting.', type: 'error' });
+            setAlertVisible(true);
+            return;
+        }
 
         setSubmissionStatus('submitting');
 
@@ -153,7 +136,7 @@ export default function SubmitReportScreen() {
             formPayload.append('relationToReporter', formData.relation);
             formPayload.append('reporterContact', formData.contactNumber);
             formPayload.append('familyEmail', formData.familyEmail);
-            formPayload.append('pinCode', formData.pinCode); // ADDED: Append PIN Code
+            formPayload.append('pinCode', formData.pinCode);
 
             if (photoUri) {
                 const filename = photoUri.split('/').pop() || 'photo.jpg';
@@ -172,7 +155,7 @@ export default function SubmitReportScreen() {
 
             if (response.ok) {
                 setSubmissionStatus('success');
-                setAlertData({ title: 'Report Submitted', message: responseData.msg, type: 'success' });
+                setAlertData({ title: 'Report Submitted', message: responseData.msg || 'The report has been received.', type: 'success' });
                 setAlertVisible(true);
             } else {
                 throw new Error(responseData.msg || `Request failed with status ${response.status}`);
@@ -227,10 +210,8 @@ export default function SubmitReportScreen() {
                     {isRelationPickerVisible && <View style={styles.dropdown}>{relationOptions.map(option => (<TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { handleChange('relation', option); setRelationPickerVisible(false); }}><Text style={styles.dropdownText}>{option}</Text></TouchableOpacity>))}</View>}
                 </View>
 
+                {/* --- FIX: Removed duplicated TextInput for contactNumber --- */}
                 <Text style={styles.label}>Reporter Contact Number (NGO/Family)</Text>
-
-                <TextInput style={[styles.input, errors.contactNumber && styles.inputError]} value={formData.contactNumber} onChangeText={(text) => handleChange('contactNumber', text)} onBlur={() => handleBlur('contactNumber')} placeholder="Enter your 10-digit contact number" keyboardType="phone-pad" placeholderTextColor="#b94e4e" maxLength={10} />
-
                 <TextInput
                     style={[styles.input, errors.contactNumber && styles.inputError]}
                     value={formData.contactNumber}
@@ -241,15 +222,13 @@ export default function SubmitReportScreen() {
                     placeholderTextColor="#b94e4e"
                     maxLength={10}
                 />
-
                 {errors.contactNumber && <Text style={styles.errorText}>{errors.contactNumber}</Text>}
 
                 <Text style={styles.label}>Family Email</Text>
                 <TextInput style={[styles.input, errors.familyEmail && styles.inputError]} value={formData.familyEmail} onChangeText={(text) => handleChange('familyEmail', text)} onBlur={() => handleBlur('familyEmail')} placeholder="Enter family email to notify them" keyboardType="email-address" autoCapitalize="none" placeholderTextColor="#b94e4e" />
                 {errors.familyEmail && <Text style={styles.errorText}>{errors.familyEmail}</Text>}
 
-                {/* ADDED: PIN Code field */}
-                <Text style={styles.label}>Set a 6-Digit PIN Code for this Report</Text>
+                <Text style={styles.label}>Enter 6-Digit PIN Code for this Report</Text>
                 <TextInput
                     style={[styles.input, errors.pinCode && styles.inputError]}
                     value={formData.pinCode}
@@ -259,10 +238,9 @@ export default function SubmitReportScreen() {
                     keyboardType="numeric"
                     placeholderTextColor="#b94e4e"
                     maxLength={6}
-                    
+                    secureTextEntry={true} // PIN should be masked for security
                 />
                 {errors.pinCode && <Text style={styles.errorText}>{errors.pinCode}</Text>}
-
 
                 <Text style={styles.label}>Upload a Clear Photo of the Missing Person</Text>
                 <TouchableOpacity style={[styles.imagePicker, errors.photo && styles.imagePickerError]} onPress={handleImagePick}>
@@ -276,6 +254,7 @@ export default function SubmitReportScreen() {
                     onPress={handleSubmit}
                     disabled={submissionStatus === 'submitting'}
                     style={{ marginTop: 20 }}
+                    showActivityIndicator={submissionStatus === 'submitting'} // Pass prop if supported
                 />
             </ScrollView>
             <CustomAlert
@@ -287,14 +266,7 @@ export default function SubmitReportScreen() {
             />
         </>
     );
-
-// --- THIS IS THE FIX ---
-// This closing brace `}` closes the SubmitReportScreen component function.
-
-
-
 }
-
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFBF8' },

@@ -1,6 +1,7 @@
-// PASTE THIS ENTIRE CODE INTO YOUR submit-report.tsx FILE
+// app/(family)/submit-reports.tsx
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+// [-] REMOVED: Native Alert is no longer used for submission feedback
 import { View, Text, StyleSheet, TextInput, ScrollView, Alert, Image, TouchableOpacity, Platform } from 'react-native';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import CustomButton from '../../components/CustomButton';
@@ -8,12 +9,13 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_API_URL } from '../../config/api';
+// [+] ADDED: Import the CustomAlert component
+import CustomAlert from '../../components/CustomAlert';
 
 // Data for the dropdowns
 const genderOptions = ['Male', 'Female', 'Other'];
 const relationOptions = ['Parent', 'Sibling', 'Spouse', 'Child', 'Friend', 'Other Relative'];
 
-// --- CHANGE #1: Add pinCode to the state type ---
 type FormDataState = {
     personName: string;
     age: string;
@@ -23,10 +25,9 @@ type FormDataState = {
     description: string;
     relation: string;
     contactNumber: string;
-    pinCode: string; // Added field
+    pinCode: string;
 };
 
-// --- CHANGE #2: Add pinCode to the initial state ---
 const initialFormData: FormDataState = {
     personName: '',
     age: '',
@@ -36,8 +37,11 @@ const initialFormData: FormDataState = {
     description: '',
     relation: '',
     contactNumber: '',
-    pinCode: '', // Added field
+    pinCode: '',
 };
+
+// [+] ADDED: Type definition for alert data
+type AlertData = { title: string; message: string; type: 'success' | 'error' | 'info' };
 
 export default function SubmitReportScreen() {
     const router = useRouter();
@@ -48,6 +52,10 @@ export default function SubmitReportScreen() {
     const [isRelationPickerVisible, setRelationPickerVisible] = useState(false);
     const [errors, setErrors] = useState<Partial<Record<keyof FormDataState | 'photo', string>>>({});
     const submissionSuccess = useRef(false);
+
+    // [+] ADDED: State variables to manage the CustomAlert
+    const [isAlertVisible, setAlertVisible] = useState(false);
+    const [alertData, setAlertData] = useState<AlertData>({ title: '', message: '', type: 'info' });
 
     const resetForm = () => {
         setFormData(initialFormData);
@@ -89,21 +97,13 @@ export default function SubmitReportScreen() {
             case 'description': if (!value || value.trim().length < 10) error = 'Please provide a detailed description.'; break;
             case 'relation': if (!value) error = 'Please select your relationship.'; break;
             case 'contactNumber': if (!value) error = 'Contact number is required.'; else if (!/^\d{10}$/.test(value)) error = 'Please enter a valid 10-digit phone number.'; break;
-            // --- CHANGE #3: Add validation rule for pinCode ---
-            case 'pinCode':
-                if (!value) {
-                    error = 'A 6-digit PIN is required.';
-                } else if (!/^\d{6}$/.test(value)) {
-                    error = 'PIN must be exactly 6 digits.';
-                }
-                break;
+            case 'pinCode': if (!value) { error = 'A 6-digit PIN is required.'; } else if (!/^\d{6}$/.test(value)) { error = 'PIN must be exactly 6 digits.'; } break;
         }
         setErrors(prev => ({ ...prev, [name]: error }));
         return !error;
     };
 
     const handleChange = (name: keyof FormDataState, value: string) => {
-        // --- CHANGE #4: Ensure pinCode only accepts numbers ---
         if (name === 'age' || name === 'contactNumber' || name === 'pinCode') {
             value = value.replace(/[^0-9]/g, '');
         }
@@ -113,16 +113,34 @@ export default function SubmitReportScreen() {
 
     const handleBlur = (name: keyof FormDataState) => { validateField(name, formData[name]); };
 
+    // [+] ADDED: Function to handle closing the alert and navigating on success
+    const handleAlertClose = () => {
+        setAlertVisible(false);
+        if (submissionSuccess.current) {
+            router.replace('/(family)/family-dashboard');
+            submissionSuccess.current = false; // Reset the flag after navigation
+        }
+    };
+
+    // [MODIFIED] Swapped all Alert.alert calls with the CustomAlert state setters
     const handleSubmit = async () => {
         const isFormValid = (Object.keys(formData) as Array<keyof FormDataState>).every(key => validateField(key, formData[key]));
         const isPhotoValid = !!photoUri;
         if (!isPhotoValid) setErrors(prev => ({ ...prev, photo: 'A clear photo is required for submission.' }));
-        if (!isFormValid || !isPhotoValid) return Alert.alert('Incomplete Form', 'Please correct the highlighted errors before submitting.');
+        
+        if (!isFormValid || !isPhotoValid) {
+            setAlertData({ title: 'Incomplete Form', message: 'Please correct the highlighted errors before submitting.', type: 'error' });
+            setAlertVisible(true);
+            return;
+        }
 
         setLoading(true);
         try {
             const userId = await AsyncStorage.getItem('userId');
-            if (!userId) { setLoading(false); return Alert.alert('Error', 'You must be logged in.'); }
+            if (!userId) {
+                setLoading(false);
+                throw new Error('You must be logged in to submit a report.');
+            }
             
             const formPayload = new FormData();
             formPayload.append('user', userId);
@@ -133,13 +151,18 @@ export default function SubmitReportScreen() {
             formPayload.append('description', formData.description);
             formPayload.append('relationToReporter', formData.relation);
             formPayload.append('reporterContact', formData.contactNumber);
-            // --- CHANGE #5: Add pinCode to the submission payload ---
             formPayload.append('pinCode', formData.pinCode);
 
             if (photoUri) {
                 const filename = photoUri.split('/').pop() || 'photo.jpg';
                 const fileType = filename.endsWith('png') ? 'image/png' : 'image/jpeg';
-                formPayload.append('photo', { uri: photoUri, name: filename, type: fileType } as any);
+                if (Platform.OS === 'web') {
+                    const response = await fetch(photoUri);
+                    const blob = await response.blob();
+                    formPayload.append('photo', blob, filename);
+                } else {
+                    formPayload.append('photo', { uri: photoUri, name: filename, type: fileType } as any);
+                }
             }
             
             const response = await fetch(`${BACKEND_API_URL}/api/reports`, { method: 'POST', body: formPayload });
@@ -147,15 +170,15 @@ export default function SubmitReportScreen() {
 
             if (response.ok) {
                 submissionSuccess.current = true;
-                Alert.alert('Report Submitted', responseData.msg || 'Your report has been received.',
-                    [{ text: 'OK', onPress: () => router.replace('/(family)/family-dashboard') }]
-                );
+                setAlertData({ title: 'Report Submitted', message: responseData.msg || 'Your report has been received.', type: 'success' });
+                setAlertVisible(true);
             } else {
                 throw new Error(responseData.msg || `Request failed with status ${response.status}`);
             }
         } catch (error) {
             const errorMessage = (error instanceof Error) ? error.message : 'Could not connect to the server.';
-            Alert.alert('Submission Failed', errorMessage);
+            setAlertData({ title: 'Submission Failed', message: errorMessage, type: 'error' });
+            setAlertVisible(true);
         } finally {
             setLoading(false);
         }
@@ -213,8 +236,7 @@ export default function SubmitReportScreen() {
                 <TextInput style={[styles.input, errors.contactNumber && styles.inputError]} value={formData.contactNumber} onChangeText={(text) => handleChange('contactNumber', text)} onBlur={() => handleBlur('contactNumber')} placeholder="Enter your 10-digit contact number" keyboardType="phone-pad" placeholderTextColor="#b94e4e" maxLength={10} />
                 {errors.contactNumber && <Text style={styles.errorText}>{errors.contactNumber}</Text>}
                 
-                {/* --- CHANGE #6: Add the visible PIN Code input field to the form --- */}
-                <Text style={styles.label}>Set a 6-Digit PIN Code for this Report</Text>
+                <Text style={styles.label}>Enter 6-Digit PIN Code for this Report</Text>
                 <TextInput
                     style={[styles.input, errors.pinCode && styles.inputError]}
                     value={formData.pinCode}
@@ -224,7 +246,6 @@ export default function SubmitReportScreen() {
                     placeholderTextColor="#b94e4e"
                     keyboardType="numeric"
                     maxLength={6}
-                    // The 'secureTextEntry' prop is omitted, so the text will be visible
                 />
                 {errors.pinCode && <Text style={styles.errorText}>{errors.pinCode}</Text>}
 
@@ -235,8 +256,17 @@ export default function SubmitReportScreen() {
                 {errors.photo && <Text style={styles.errorText}>{errors.photo}</Text>}
                 <Text style={styles.subLabel}>Photo is essential for AI-powered face matching.</Text>
 
-                <CustomButton title={loading ? 'Submitting...' : 'Submit Report'} onPress={handleSubmit} disabled={loading} style={{ marginTop: 20 }} />
+                <CustomButton title={loading ? 'Submitting...' : 'Submit Report'} onPress={handleSubmit} disabled={loading} style={{ marginTop: 20 }} showActivityIndicator={loading} />
             </ScrollView>
+
+            {/* [+] ADDED: CustomAlert component to render feedback */}
+            <CustomAlert
+                visible={isAlertVisible}
+                title={alertData.title}
+                message={alertData.message}
+                type={alertData.type}
+                onClose={handleAlertClose}
+            />
         </>
     );
 }

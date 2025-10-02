@@ -44,6 +44,7 @@ const RequestSchema = new Schema({
         default: 'Pending'
     },
     approvedUser: { type: Schema.Types.ObjectId, ref: 'User' },
+    pinCode: { type: String, required: true },
 });
 // --- END OF FIX ---
 
@@ -66,6 +67,7 @@ const MissingReportSchema = new Schema({
     familyEmail: { type: String },
     photo_url: { type: String },
     status: { type: String, default: 'Pending', required: true },
+    pinCode: { type: String,required: true,},
     reported_at: { type: Date, default: Date.now }
 });
 const UploadedPhotoSchema = new Schema({
