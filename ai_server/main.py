@@ -53,7 +53,11 @@ app = FastAPI(
 # --- CORS Configuration ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[""], allow_credentials=True, allow_methods=[""], allow_headers=["*"],
+    # Allow requests from the React Native dev server (adjust in production).
+    allow_origins=["http://localhost:8081"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # --- Mount Static Directory to Serve Images ---
