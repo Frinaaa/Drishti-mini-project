@@ -1,15 +1,17 @@
 // app/(ngo)/submit-reports.tsx
 
-import React, { useState } from 'react';
+// --- FIX: Import useEffect from 'react' ---
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, Image, TouchableOpacity, Platform, Alert } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import CustomButton from '../../components/CustomButton';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL as BACKEND_API_URL } from '../../config/api'; // Corrected import name for consistency
+import { BACKEND_API_URL } from '../../config/api';
 import CustomAlert from '../../components/CustomAlert';
 
+// --- Top-level definitions ---
 const genderOptions = ['Male', 'Female', 'Other'];
 const relationOptions = ['Parent', 'Sibling', 'Spouse', 'Child', 'Friend', 'Other Relative', 'None (NGO Report)'];
 
@@ -44,14 +46,23 @@ export default function SubmitReportScreen() {
     const [submissionStatus, setSubmissionStatus] = useState<SubmissionStatus>('idle');
     const [isAlertVisible, setAlertVisible] = useState(false);
     const [alertData, setAlertData] = useState<AlertData>({ title: '', message: '', type: 'info' });
-    
-    // --- CORRECTED LINE: REMOVED a redundant useEffect hook ---
-    // The logic to show an alert is already handled perfectly by your CustomAlert component.
-    // This useEffect was creating a second, conflicting alert (the standard React Native one).
+
+    // This useEffect was causing the error because it wasn't imported.
+    // It's also using the native Alert, which doesn't work on web.
+    // We will replace its logic inside the handleSubmit function.
+    useEffect(() => {
+        // This block is now handled by the CustomAlert logic in handleSubmit.
+        // Keeping this here for reference, but it can be removed.
+        console.log("Submission status changed:", submissionStatus);
+    }, [submissionStatus]);
+
 
     const handleImagePick = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') { return; }
+        if (status !== 'granted') {
+            Alert.alert('Permission Denied', 'Camera roll access is needed to upload a photo.');
+            return;
+        }
         let result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5,
         });
@@ -61,6 +72,7 @@ export default function SubmitReportScreen() {
         }
     };
 
+    // --- FIX: Single, clean validateField function ---
     const validateField = (name: keyof FormDataState, value: string) => {
         let error = '';
         switch (name) {
@@ -71,30 +83,9 @@ export default function SubmitReportScreen() {
             case 'lastSeenDateTime': if (!value || value.trim().length < 3) error = 'Please enter valid date/time info.'; break;
             case 'description': if (!value || value.trim().length < 10) error = 'Please provide a detailed description.'; break;
             case 'relation': if (!value) error = 'Please select your relationship.'; break;
-            
-            // --- CORRECTED LINES: Removed duplicate validation cases ---
-            // The more specific validation logic below is correct. The duplicate, less specific cases were removed.
-            case 'contactNumber':
-                if (!value) {
-                    error = 'Contact number is required.';
-                } else if (!/^\d{10}$/.test(value)) { // Enforces EXACTLY 10 digits
-                    error = 'Please enter a valid 10-digit phone number.';
-                }
-                break;
-            case 'familyEmail': 
-                if (!value) {
-                    error = 'Family email is required.';
-                } else if (!/\S+@\S+\.\S+/.test(value)) {
-                    error = 'Please enter a valid email address.';
-                }
-                break;
-            case 'pinCode':
-                if (!value) {
-                    error = 'PIN Code is required.';
-                } else if (!/^\d{6}$/.test(value)) {
-                    error = 'PIN Code must be exactly 6 digits.';
-                }
-                break;
+            case 'contactNumber': if (!value) { error = 'Contact number is required.'; } else if (!/^\d{10}$/.test(value)) { error = 'Please enter a valid 10-digit phone number.'; } break;
+            case 'familyEmail': if (!value) { error = 'Family email is required.'; } else if (!/\S+@\S+\.\S+/.test(value)) { error = 'Please enter a valid email address.'; } break;
+            case 'pinCode': if (!value) { error = 'PIN Code is required.'; } else if (!/^\d{6}$/.test(value)) { error = 'PIN Code must be exactly 6 digits.'; } break;
         }
         setErrors(prev => ({ ...prev, [name]: error }));
         return !error;
@@ -122,7 +113,12 @@ export default function SubmitReportScreen() {
         const isFormValid = (Object.keys(formData) as Array<keyof FormDataState>).every(key => validateField(key, formData[key]));
         const isPhotoValid = !!photoUri;
         if (!isPhotoValid) setErrors(prev => ({ ...prev, photo: 'A clear photo is required for submission.' }));
-        if (!isFormValid || !isPhotoValid) return;
+        
+        if (!isFormValid || !isPhotoValid) {
+            setAlertData({ title: 'Incomplete Form', message: 'Please correct the highlighted errors before submitting.', type: 'error' });
+            setAlertVisible(true);
+            return;
+        }
 
         setSubmissionStatus('submitting');
 
@@ -145,7 +141,13 @@ export default function SubmitReportScreen() {
             if (photoUri) {
                 const filename = photoUri.split('/').pop() || 'photo.jpg';
                 const fileType = filename.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
-                formPayload.append('photo', { uri: photoUri, name: filename, type: fileType } as any);
+                if (Platform.OS === 'web') {
+                    const response = await fetch(photoUri);
+                    const blob = await response.blob();
+                    formPayload.append('photo', blob, filename);
+                } else {
+                    formPayload.append('photo', { uri: photoUri, name: filename, type: fileType } as any);
+                }
             }
 
             const response = await fetch(`${BACKEND_API_URL}/api/reports`, { method: 'POST', body: formPayload });
@@ -153,7 +155,8 @@ export default function SubmitReportScreen() {
 
             if (response.ok) {
                 setSubmissionStatus('success');
-                setAlertData({ title: 'Report Submitted', message: responseData.msg || 'Success!', type: 'success' });
+                setAlertData({ title: 'Report Submitted', message: responseData.msg || 'The report has been received.', type: 'success' });
+                setAlertVisible(true);
             } else {
                 throw new Error(responseData.msg || `Request failed with status ${response.status}`);
             }
@@ -161,8 +164,7 @@ export default function SubmitReportScreen() {
             setSubmissionStatus('error');
             const errorMessage = (error instanceof Error) ? error.message : 'Could not connect to the server.';
             setAlertData({ title: 'Submission Failed', message: errorMessage, type: 'error' });
-        } finally {
-            setAlertVisible(true); // Show the alert in both success and error cases
+            setAlertVisible(true);
         }
     };
 
@@ -208,9 +210,8 @@ export default function SubmitReportScreen() {
                     {isRelationPickerVisible && <View style={styles.dropdown}>{relationOptions.map(option => (<TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { handleChange('relation', option); setRelationPickerVisible(false); }}><Text style={styles.dropdownText}>{option}</Text></TouchableOpacity>))}</View>}
                 </View>
 
+                {/* --- FIX: Removed duplicated TextInput for contactNumber --- */}
                 <Text style={styles.label}>Reporter Contact Number (NGO/Family)</Text>
-                {/* --- CORRECTED LINE: Removed a duplicated TextInput component --- */}
-                {/* You had two identical TextInput fields for contactNumber here. One has been removed. */}
                 <TextInput
                     style={[styles.input, errors.contactNumber && styles.inputError]}
                     value={formData.contactNumber}
@@ -226,8 +227,8 @@ export default function SubmitReportScreen() {
                 <Text style={styles.label}>Family Email</Text>
                 <TextInput style={[styles.input, errors.familyEmail && styles.inputError]} value={formData.familyEmail} onChangeText={(text) => handleChange('familyEmail', text)} onBlur={() => handleBlur('familyEmail')} placeholder="Enter family email to notify them" keyboardType="email-address" autoCapitalize="none" placeholderTextColor="#b94e4e" />
                 {errors.familyEmail && <Text style={styles.errorText}>{errors.familyEmail}</Text>}
-                
-                <Text style={styles.label}>Set a 6-Digit PIN Code for this Report</Text>
+
+                <Text style={styles.label}>Enter 6-Digit PIN Code for this Report</Text>
                 <TextInput
                     style={[styles.input, errors.pinCode && styles.inputError]}
                     value={formData.pinCode}
@@ -237,6 +238,7 @@ export default function SubmitReportScreen() {
                     keyboardType="numeric"
                     placeholderTextColor="#b94e4e"
                     maxLength={6}
+                    secureTextEntry={true} // PIN should be masked for security
                 />
                 {errors.pinCode && <Text style={styles.errorText}>{errors.pinCode}</Text>}
 
@@ -252,6 +254,7 @@ export default function SubmitReportScreen() {
                     onPress={handleSubmit}
                     disabled={submissionStatus === 'submitting'}
                     style={{ marginTop: 20 }}
+                    showActivityIndicator={submissionStatus === 'submitting'} // Pass prop if supported
                 />
             </ScrollView>
             <CustomAlert
