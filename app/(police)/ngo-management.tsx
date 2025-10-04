@@ -27,6 +27,7 @@ interface NgoApplication {
   registrationId?: string;
   documentPath?: string;
   dateOfRequest?: string;
+  pinCode?:string;
   status: 'Pending' | 'Approved' | 'Rejected';
   approvedUser?: any;
 }
@@ -245,6 +246,7 @@ export default function NgoManagementScreen() {
                 <InfoRow label="Email" value={selectedApplication.email} />
                 <InfoRow label="Contact" value={selectedApplication.contactNumber || ''} />
                 <InfoRow label="Location" value={selectedApplication.location || ''} />
+                <InfoRow label="Pincode" value={selectedApplication.pinCode || 'N/A'} />
                 <InfoRow label="Submitted On" value={selectedApplication.dateOfRequest ? new Date(selectedApplication.dateOfRequest).toLocaleDateString() : ''} />
                 <InfoRow label="Description" value={selectedApplication.description || ''} />
                 {selectedApplication.documentPath && (
