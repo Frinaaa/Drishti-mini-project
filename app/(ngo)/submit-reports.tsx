@@ -1,8 +1,7 @@
 // app/(ngo)/submit-reports.tsx
 
-// --- FIX: Import useEffect from 'react' ---
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Image, TouchableOpacity, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, Image, TouchableOpacity, Platform, Alert, ActivityIndicator } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import CustomButton from '../../components/CustomButton';
 import * as ImagePicker from 'expo-image-picker';
@@ -36,10 +35,19 @@ const initialFormData: FormDataState = {
 type SubmissionStatus = 'idle' | 'submitting' | 'success' | 'error';
 type AlertData = { title: string; message: string; type: 'success' | 'error' | 'info' };
 
+// --- Helper Component for the Review Screen ---
+const ReviewRow = ({ label, value }: { label: string; value?: string }) => (
+    <View style={styles.reviewRow}>
+        <Text style={styles.reviewLabel}>{label}</Text>
+        <Text style={styles.reviewValue}>{value || 'N/A'}</Text>
+    </View>
+);
+
 export default function SubmitReportScreen() {
     const router = useRouter();
     const [formData, setFormData] = useState<FormDataState>(initialFormData);
     const [photoUri, setPhotoUri] = useState<string | null>(null);
+    const [isReviewVisible, setReviewVisible] = useState(false); // State to control view
     const [isGenderPickerVisible, setGenderPickerVisible] = useState(false);
     const [isRelationPickerVisible, setRelationPickerVisible] = useState(false);
     const [errors, setErrors] = useState<Partial<Record<keyof FormDataState | 'photo', string>>>({});
@@ -47,15 +55,9 @@ export default function SubmitReportScreen() {
     const [isAlertVisible, setAlertVisible] = useState(false);
     const [alertData, setAlertData] = useState<AlertData>({ title: '', message: '', type: 'info' });
 
-    // This useEffect was causing the error because it wasn't imported.
-    // It's also using the native Alert, which doesn't work on web.
-    // We will replace its logic inside the handleSubmit function.
     useEffect(() => {
-        // This block is now handled by the CustomAlert logic in handleSubmit.
-        // Keeping this here for reference, but it can be removed.
         console.log("Submission status changed:", submissionStatus);
     }, [submissionStatus]);
-
 
     const handleImagePick = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -72,7 +74,6 @@ export default function SubmitReportScreen() {
         }
     };
 
-    // --- FIX: Single, clean validateField function ---
     const validateField = (name: keyof FormDataState, value: string) => {
         let error = '';
         switch (name) {
@@ -109,19 +110,22 @@ export default function SubmitReportScreen() {
         setSubmissionStatus('idle');
     };
 
-    const handleSubmit = async () => {
+    const handleProceedToReview = () => {
         const isFormValid = (Object.keys(formData) as Array<keyof FormDataState>).every(key => validateField(key, formData[key]));
         const isPhotoValid = !!photoUri;
         if (!isPhotoValid) setErrors(prev => ({ ...prev, photo: 'A clear photo is required for submission.' }));
         
         if (!isFormValid || !isPhotoValid) {
-            setAlertData({ title: 'Incomplete Form', message: 'Please correct the highlighted errors before submitting.', type: 'error' });
+            setAlertData({ title: 'Incomplete Form', message: 'Please correct the highlighted errors before proceeding.', type: 'error' });
             setAlertVisible(true);
             return;
         }
+        
+        setReviewVisible(true);
+    };
 
+    const handleConfirmAndSubmit = async () => {
         setSubmissionStatus('submitting');
-
         try {
             const userId = await AsyncStorage.getItem('userId');
             if (!userId) throw new Error('You must be logged in to submit a report.');
@@ -165,98 +169,123 @@ export default function SubmitReportScreen() {
             const errorMessage = (error instanceof Error) ? error.message : 'Could not connect to the server.';
             setAlertData({ title: 'Submission Failed', message: errorMessage, type: 'error' });
             setAlertVisible(true);
+        } finally {
+            if (submissionStatus === 'error') {
+                setReviewVisible(false);
+            }
         }
     };
 
     return (
         <>
-            <Stack.Screen options={{ title: 'Report Missing Person' }} />
-            <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-                <Text style={styles.label}>Full Name of Missing Person</Text>
-                <TextInput style={[styles.input, errors.personName && styles.inputError]} value={formData.personName} onChangeText={(text) => handleChange('personName', text)} onBlur={() => handleBlur('personName')} placeholder="Enter full name" placeholderTextColor="#b94e4e" />
-                {errors.personName && <Text style={styles.errorText}>{errors.personName}</Text>}
+            <Stack.Screen options={{ title: isReviewVisible ? 'Confirm Your Report' : 'Report Missing Person' }} />
+            
+            {isReviewVisible ? (
+                // --- REVIEW VIEW ---
+                <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+                    <Text style={styles.reviewTitle}>Please review the details before submitting.</Text>
+                    
+                    {photoUri && (
+                        <View style={styles.reviewImageContainer}>
+                            <Image source={{ uri: photoUri }} style={styles.reviewImage} />
+                        </View>
+                    )}
+                    
+                    <ReviewRow label="Full Name" value={formData.personName} />
+                    <ReviewRow label="Age" value={formData.age} />
+                    <ReviewRow label="Gender" value={formData.gender} />
+                    <ReviewRow label="Last Seen Location" value={formData.lastSeenLocation} />
+                    <ReviewRow label="Last Seen Date/Time" value={formData.lastSeenDateTime} />
+                    <ReviewRow label="Description" value={formData.description} />
+                    <ReviewRow label="Relation to Person" value={formData.relation} />
+                    <ReviewRow label="Reporter Contact" value={formData.contactNumber} />
+                    <ReviewRow label="Family Email" value={formData.familyEmail} />
+                    <ReviewRow label="Report PIN" value={"*".repeat(formData.pinCode.length)} />
 
-                <Text style={styles.label}>Age</Text>
-                <TextInput style={[styles.input, errors.age && styles.inputError]} value={formData.age} onChangeText={(text) => handleChange('age', text)} onBlur={() => handleBlur('age')} placeholder="Enter age" keyboardType="numeric" placeholderTextColor="#b94e4e" maxLength={3} />
-                {errors.age && <Text style={styles.errorText}>{errors.age}</Text>}
-
-                <Text style={styles.label}>Gender</Text>
-                <View>
-                    <TouchableOpacity style={[styles.input, errors.gender && styles.inputError]} onPress={() => setGenderPickerVisible(!isGenderPickerVisible)}>
-                        <View style={styles.dropdownHeader}><Text style={[styles.dropdownHeaderText, !formData.gender && styles.placeholderText]}>{formData.gender || 'Select gender'}</Text><Ionicons name={isGenderPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" /></View>
+                    <CustomButton
+                        title={submissionStatus === 'submitting' ? 'Submitting...' : 'Confirm & Submit'}
+                        onPress={handleConfirmAndSubmit}
+                        disabled={submissionStatus === 'submitting'}
+                        style={{ marginTop: 20 }}
+                        showActivityIndicator={submissionStatus === 'submitting'}
+                    />
+                    <TouchableOpacity
+                        style={styles.editButton}
+                        onPress={() => setReviewVisible(false)}
+                        disabled={submissionStatus === 'submitting'}
+                    >
+                        <Text style={styles.editButtonText}>Edit Details</Text>
                     </TouchableOpacity>
-                    {errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
-                    {isGenderPickerVisible && <View style={styles.dropdown}>{genderOptions.map(option => (<TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { handleChange('gender', option); setGenderPickerVisible(false); }}><Text style={styles.dropdownText}>{option}</Text></TouchableOpacity>))}</View>}
-                </View>
+                </ScrollView>
+            ) : (
+                // --- FORM VIEW (Original ScrollView) ---
+                <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+                    <Text style={styles.label}>Full Name of Missing Person</Text>
+                    <TextInput style={[styles.input, errors.personName && styles.inputError]} value={formData.personName} onChangeText={(text) => handleChange('personName', text)} onBlur={() => handleBlur('personName')} placeholder="Enter full name" placeholderTextColor="#b94e4e" />
+                    {errors.personName && <Text style={styles.errorText}>{errors.personName}</Text>}
 
-                <Text style={styles.label}>Last Seen Location</Text>
-                <TextInput style={[styles.input, errors.lastSeenLocation && styles.inputError]} value={formData.lastSeenLocation} onChangeText={(text) => handleChange('lastSeenLocation', text)} onBlur={() => handleBlur('lastSeenLocation')} placeholder="Enter last seen location" placeholderTextColor="#b94e4e" />
-                {errors.lastSeenLocation && <Text style={styles.errorText}>{errors.lastSeenLocation}</Text>}
+                    <Text style={styles.label}>Age</Text>
+                    <TextInput style={[styles.input, errors.age && styles.inputError]} value={formData.age} onChangeText={(text) => handleChange('age', text)} onBlur={() => handleBlur('age')} placeholder="Enter age" keyboardType="numeric" placeholderTextColor="#b94e4e" maxLength={3} />
+                    {errors.age && <Text style={styles.errorText}>{errors.age}</Text>}
 
-                <Text style={styles.label}>Last Seen Date & Time</Text>
-                <TextInput style={[styles.input, errors.lastSeenDateTime && styles.inputError]} value={formData.lastSeenDateTime} onChangeText={(text) => handleChange('lastSeenDateTime', text)} onBlur={() => handleBlur('lastSeenDateTime')} placeholder="e.g., Yesterday at 5 PM" placeholderTextColor="#b94e4e" />
-                {errors.lastSeenDateTime && <Text style={styles.errorText}>{errors.lastSeenDateTime}</Text>}
+                    <Text style={styles.label}>Gender</Text>
+                    <View>
+                        <TouchableOpacity style={[styles.input, errors.gender && styles.inputError]} onPress={() => setGenderPickerVisible(!isGenderPickerVisible)}>
+                            <View style={styles.dropdownHeader}><Text style={[styles.dropdownHeaderText, !formData.gender && styles.placeholderText]}>{formData.gender || 'Select gender'}</Text><Ionicons name={isGenderPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" /></View>
+                        </TouchableOpacity>
+                        {errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
+                        {isGenderPickerVisible && <View style={styles.dropdown}>{genderOptions.map(option => (<TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { handleChange('gender', option); setGenderPickerVisible(false); }}><Text style={styles.dropdownText}>{option}</Text></TouchableOpacity>))}</View>}
+                    </View>
 
-                <Text style={styles.label}>Description / Clothing / Identifiable Marks</Text>
-                <TextInput style={[styles.input, styles.textArea, errors.description && styles.inputError]} value={formData.description} onChangeText={(text) => handleChange('description', text)} onBlur={() => handleBlur('description')} multiline placeholder="Describe what the person was wearing" placeholderTextColor="#b94e4e" />
-                {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
+                    <Text style={styles.label}>Last Seen Location</Text>
+                    <TextInput style={[styles.input, errors.lastSeenLocation && styles.inputError]} value={formData.lastSeenLocation} onChangeText={(text) => handleChange('lastSeenLocation', text)} onBlur={() => handleBlur('lastSeenLocation')} placeholder="Enter last seen location" placeholderTextColor="#b94e4e" />
+                    {errors.lastSeenLocation && <Text style={styles.errorText}>{errors.lastSeenLocation}</Text>}
 
-                <Text style={styles.label}>Relation to Missing Person</Text>
-                <View>
-                    <TouchableOpacity style={[styles.input, errors.relation && styles.inputError]} onPress={() => setRelationPickerVisible(!isRelationPickerVisible)}>
-                        <View style={styles.dropdownHeader}><Text style={[styles.dropdownHeaderText, !formData.relation && styles.placeholderText]}>{formData.relation || 'Select your relationship'}</Text><Ionicons name={isRelationPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" /></View>
+                    <Text style={styles.label}>Last Seen Date & Time</Text>
+                    <TextInput style={[styles.input, errors.lastSeenDateTime && styles.inputError]} value={formData.lastSeenDateTime} onChangeText={(text) => handleChange('lastSeenDateTime', text)} onBlur={() => handleBlur('lastSeenDateTime')} placeholder="e.g., Yesterday at 5 PM" placeholderTextColor="#b94e4e" />
+                    {errors.lastSeenDateTime && <Text style={styles.errorText}>{errors.lastSeenDateTime}</Text>}
+
+                    <Text style={styles.label}>Description / Clothing / Identifiable Marks</Text>
+                    <TextInput style={[styles.input, styles.textArea, errors.description && styles.inputError]} value={formData.description} onChangeText={(text) => handleChange('description', text)} onBlur={() => handleBlur('description')} multiline placeholder="Describe what the person was wearing" placeholderTextColor="#b94e4e" />
+                    {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
+
+                    <Text style={styles.label}>Relation to Missing Person</Text>
+                    <View>
+                        <TouchableOpacity style={[styles.input, errors.relation && styles.inputError]} onPress={() => setRelationPickerVisible(!isRelationPickerVisible)}>
+                            <View style={styles.dropdownHeader}><Text style={[styles.dropdownHeaderText, !formData.relation && styles.placeholderText]}>{formData.relation || 'Select your relationship'}</Text><Ionicons name={isRelationPickerVisible ? "chevron-up-outline" : "chevron-down-outline"} size={20} color="#3A0000" /></View>
+                        </TouchableOpacity>
+                        {errors.relation && <Text style={styles.errorText}>{errors.relation}</Text>}
+                        {isRelationPickerVisible && <View style={styles.dropdown}>{relationOptions.map(option => (<TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { handleChange('relation', option); setRelationPickerVisible(false); }}><Text style={styles.dropdownText}>{option}</Text></TouchableOpacity>))}</View>}
+                    </View>
+
+                    <Text style={styles.label}>Reporter Contact Number (NGO/Family)</Text>
+                    <TextInput style={[styles.input, errors.contactNumber && styles.inputError]} value={formData.contactNumber} onChangeText={(text) => handleChange('contactNumber', text)} onBlur={() => handleBlur('contactNumber')} placeholder="Enter your 10-digit contact number" keyboardType="phone-pad" placeholderTextColor="#b94e4e" maxLength={10}/>
+                    {errors.contactNumber && <Text style={styles.errorText}>{errors.contactNumber}</Text>}
+
+                    <Text style={styles.label}>Family Email</Text>
+                    <TextInput style={[styles.input, errors.familyEmail && styles.inputError]} value={formData.familyEmail} onChangeText={(text) => handleChange('familyEmail', text)} onBlur={() => handleBlur('familyEmail')} placeholder="Enter family email to notify them" keyboardType="email-address" autoCapitalize="none" placeholderTextColor="#b94e4e" />
+                    {errors.familyEmail && <Text style={styles.errorText}>{errors.familyEmail}</Text>}
+
+                    <Text style={styles.label}>Enter 6-Digit PIN Code for this Report</Text>
+                    <TextInput style={[styles.input, errors.pinCode && styles.inputError]} value={formData.pinCode} onChangeText={(text) => handleChange('pinCode', text)} onBlur={() => handleBlur('pinCode')} placeholder="Enter 6-digit PIN" keyboardType="numeric" placeholderTextColor="#b94e4e" maxLength={6}  />
+                    {errors.pinCode && <Text style={styles.errorText}>{errors.pinCode}</Text>}
+
+                    <Text style={styles.label}>Upload a Clear Photo of the Missing Person</Text>
+                    <TouchableOpacity style={[styles.imagePicker, errors.photo && styles.imagePickerError]} onPress={handleImagePick}>
+                        {photoUri ? <Image source={{ uri: photoUri }} style={styles.imagePreview} /> : <Text style={styles.imagePickerText}>Tap to upload photo</Text>}
                     </TouchableOpacity>
-                    {errors.relation && <Text style={styles.errorText}>{errors.relation}</Text>}
-                    {isRelationPickerVisible && <View style={styles.dropdown}>{relationOptions.map(option => (<TouchableOpacity key={option} style={styles.dropdownItem} onPress={() => { handleChange('relation', option); setRelationPickerVisible(false); }}><Text style={styles.dropdownText}>{option}</Text></TouchableOpacity>))}</View>}
-                </View>
+                    {errors.photo && <Text style={styles.errorText}>{errors.photo}</Text>}
+                    <Text style={styles.subLabel}>Photo is essential for AI-powered face matching.</Text>
 
-                {/* --- FIX: Removed duplicated TextInput for contactNumber --- */}
-                <Text style={styles.label}>Reporter Contact Number (NGO/Family)</Text>
-                <TextInput
-                    style={[styles.input, errors.contactNumber && styles.inputError]}
-                    value={formData.contactNumber}
-                    onChangeText={(text) => handleChange('contactNumber', text)}
-                    onBlur={() => handleBlur('contactNumber')}
-                    placeholder="Enter your 10-digit contact number"
-                    keyboardType="phone-pad"
-                    placeholderTextColor="#b94e4e"
-                    maxLength={10}
-                />
-                {errors.contactNumber && <Text style={styles.errorText}>{errors.contactNumber}</Text>}
+                    <CustomButton
+                        title="Review Report"
+                        onPress={handleProceedToReview}
+                        disabled={submissionStatus === 'submitting'}
+                        style={{ marginTop: 20 }}
+                    />
+                </ScrollView>
+            )}
 
-                <Text style={styles.label}>Family Email</Text>
-                <TextInput style={[styles.input, errors.familyEmail && styles.inputError]} value={formData.familyEmail} onChangeText={(text) => handleChange('familyEmail', text)} onBlur={() => handleBlur('familyEmail')} placeholder="Enter family email to notify them" keyboardType="email-address" autoCapitalize="none" placeholderTextColor="#b94e4e" />
-                {errors.familyEmail && <Text style={styles.errorText}>{errors.familyEmail}</Text>}
-
-                <Text style={styles.label}>Enter 6-Digit PIN Code for this Report</Text>
-                <TextInput
-                    style={[styles.input, errors.pinCode && styles.inputError]}
-                    value={formData.pinCode}
-                    onChangeText={(text) => handleChange('pinCode', text)}
-                    onBlur={() => handleBlur('pinCode')}
-                    placeholder="Enter 6-digit PIN"
-                    keyboardType="numeric"
-                    placeholderTextColor="#b94e4e"
-                    maxLength={6}
-                    secureTextEntry={true} // PIN should be masked for security
-                />
-                {errors.pinCode && <Text style={styles.errorText}>{errors.pinCode}</Text>}
-
-                <Text style={styles.label}>Upload a Clear Photo of the Missing Person</Text>
-                <TouchableOpacity style={[styles.imagePicker, errors.photo && styles.imagePickerError]} onPress={handleImagePick}>
-                    {photoUri ? <Image source={{ uri: photoUri }} style={styles.imagePreview} /> : <Text style={styles.imagePickerText}>Tap to upload photo</Text>}
-                </TouchableOpacity>
-                {errors.photo && <Text style={styles.errorText}>{errors.photo}</Text>}
-                <Text style={styles.subLabel}>Photo is essential for AI-powered face matching.</Text>
-
-                <CustomButton
-                    title={submissionStatus === 'submitting' ? 'Submitting...' : 'Submit Report'}
-                    onPress={handleSubmit}
-                    disabled={submissionStatus === 'submitting'}
-                    style={{ marginTop: 20 }}
-                    showActivityIndicator={submissionStatus === 'submitting'} // Pass prop if supported
-                />
-            </ScrollView>
             <CustomAlert
                 visible={isAlertVisible}
                 title={alertData.title}
@@ -287,4 +316,52 @@ const styles = StyleSheet.create({
     dropdown: { backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 1, borderColor: '#E4C4C4', marginTop: -15, },
     dropdownItem: { padding: 14, borderBottomWidth: 1, borderBottomColor: '#F0E0E0' },
     dropdownText: { fontSize: 16 },
+    // --- Styles for the Review Screen ---
+    reviewTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#3A0000',
+        textAlign: 'center',
+        marginBottom: 20,
+    },
+    reviewImageContainer: {
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    reviewImage: {
+        width: 150,
+        height: 150,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: '#E4C4C4',
+    },
+    reviewRow: {
+        backgroundColor: '#FFFFFF',
+        padding: 15,
+        borderRadius: 10,
+        marginBottom: 10,
+        borderWidth: 1,
+        borderColor: '#F0E0E0',
+    },
+    reviewLabel: {
+        fontSize: 14,
+        color: '#A47171',
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    reviewValue: {
+        fontSize: 16,
+        color: '#3A0000',
+    },
+    editButton: {
+        marginTop: 12,
+        padding: 12,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    editButtonText: {
+        fontSize: 16,
+        color: '#3A0000',
+        fontWeight: 'bold',
+    },
 });

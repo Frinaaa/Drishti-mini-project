@@ -8,12 +8,12 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
-  Alert, // Keep native Alert for the web fallback
+  Alert, // Kept for potential non-UI related alerts if needed
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
-import CustomAlert from "@/components/CustomAlert"; // Assuming you have this component
+import CustomAlert from "@/components/CustomAlert";
 import CustomButton from "@/components/CustomButton";
 import { BACKEND_API_URL } from "@/config/api";
 
@@ -31,11 +31,16 @@ const getBase64ForWebApp = (blob: Blob): Promise<string> => {
   });
 };
 
-export default function SubmitRequestScreen() {
-  // --- FIX: Declare router only ONCE at the top ---
-  const router = useRouter();
+// Helper Component for the Review Screen
+const ReviewRow = ({ label, value }: { label: string; value?: string }) => (
+    <View style={styles.reviewRow}>
+        <Text style={styles.reviewLabel}>{label}</Text>
+        <Text style={styles.reviewValue}>{value || 'N/A'}</Text>
+    </View>
+);
 
-  // --- FIX: Unified state with pinCode included ---
+export default function SubmitRequestScreen() {
+  const router = useRouter();
   const [formData, setFormData] = useState({
     ngoName: "",
     registrationId: "",
@@ -47,13 +52,12 @@ export default function SubmitRequestScreen() {
     pinCode: "",
   });
 
-  // --- FIX: Single set of state declarations ---
   const [errors, setErrors] = useState<Partial<typeof formData> & { document?: string }>({});
   const [document, setDocument] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isReviewVisible, setReviewVisible] = useState(false); // State to control view
 
-  // --- State for the CustomAlert component ---
   const [alert, setAlert] = useState({
     visible: false,
     title: "",
@@ -73,56 +77,22 @@ export default function SubmitRequestScreen() {
     setAlert((prev) => ({ ...prev, visible: false }));
   };
 
-  // --- FIX: Single validation function with pinCode ---
   const validateField = (name: keyof typeof formData, value: string) => {
     let error = "";
     switch (name) {
-      case "ngoName":
-        if (!value) error = "NGO Name is required.";
-        break;
-      case "registrationId":
-        if (!value) error = "Registration ID is required.";
-        break;
-      case "description":
-        if (!value) error = "A brief description is required.";
-        break;
-      case "location":
-        if (!value) error = "Location is required.";
-        break;
-      case "email":
-        if (!value) {
-          error = "Email address is required.";
-        } else if (!/\S+@\S+\.\S+/.test(value)) {
-          error = "Please enter a valid email address.";
-        }
-        break;
-      case "contactNumber":
-        if (!value) {
-          error = "Contact number is required.";
-        } else if (!/^\d{10}$/.test(value)) {
-          error = "Contact number must be 10 digits.";
-        }
-        break;
-      case "password":
-        if (!value) {
-          error = "Password is required.";
-        } else if (value.length < 6) {
-          error = "Password must be at least 6 characters long.";
-        }
-        break;
-      case "pinCode":
-        if (!value) {
-          error = "PIN Code is required.";
-        } else if (!/^\d{6}$/.test(value)) {
-          error = "PIN Code must be exactly 6 digits.";
-        }
-        break;
+      case "ngoName": if (!value) error = "NGO Name is required."; break;
+      case "registrationId": if (!value) error = "Registration ID is required."; break;
+      case "description": if (!value) error = "A brief description is required."; break;
+      case "location": if (!value) error = "Location is required."; break;
+      case "email": if (!value) error = "Email address is required."; else if (!/\S+@\S+\.\S+/.test(value)) error = "Please enter a valid email address."; break;
+      case "contactNumber": if (!value) error = "Contact number is required."; else if (!/^\d{10}$/.test(value)) error = "Contact number must be 10 digits."; break;
+      case "password": if (!value) error = "Password is required."; else if (value.length < 6) error = "Password must be at least 6 characters long."; break;
+      case "pinCode": if (!value) error = "PIN Code is required."; else if (!/^\d{6}$/.test(value)) error = "PIN Code must be exactly 6 digits."; break;
     }
     setErrors((prev) => ({ ...prev, [name]: error }));
     return !error;
   };
 
-  // --- FIX: Single handleChange function with pinCode logic ---
   const handleChange = (name: keyof typeof formData, value: string) => {
     if (name === "pinCode" || name === "contactNumber") {
       value = value.replace(/[^0-9]/g, "");
@@ -137,7 +107,6 @@ export default function SubmitRequestScreen() {
     validateField(name, formData[name]);
   };
 
-  // --- FIX: Single, clean version of supporting functions ---
   const pickDocument = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
@@ -145,11 +114,7 @@ export default function SubmitRequestScreen() {
       return;
     }
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
-        base64: true,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8, base64: true });
       if (!result.canceled && result.assets) {
         setDocument(result.assets[0]);
         setErrors((prev) => ({ ...prev, document: "" }));
@@ -161,35 +126,27 @@ export default function SubmitRequestScreen() {
   };
 
   const resetForm = () => {
-    setFormData({
-      ngoName: "",
-      registrationId: "",
-      description: "",
-      contactNumber: "",
-      email: "",
-      location: "",
-      password: "",
-      pinCode: "",
-    });
+    setFormData({ ngoName: "", registrationId: "", description: "", contactNumber: "", email: "", location: "", password: "", pinCode: "" });
     setDocument(null);
     setErrors({});
   };
 
-  // --- FIX: Single, clean handleSubmit function ---
-  const handleSubmit = async () => {
+  const handleProceedToReview = () => {
     const isFormValid = Object.keys(formData).every((key) =>
       validateField(key as keyof typeof formData, formData[key as keyof typeof formData])
     );
-
     const isDocValid = !!document;
     if (!isDocValid) {
       setErrors((prev) => ({ ...prev, document: "Registration proof document is required." }));
     }
 
     if (!isFormValid || !isDocValid) {
-      return showAlert("Invalid Information", "Please correct the errors before submitting.", "error");
+      return showAlert("Invalid Information", "Please correct the errors before proceeding.", "error");
     }
+    setReviewVisible(true);
+  };
 
+  const handleConfirmAndSubmit = async () => {
     setIsSubmitting(true);
     try {
       let base64String = "";
@@ -223,149 +180,112 @@ export default function SubmitRequestScreen() {
           hideAlert();
           resetForm();
           router.replace("/(auth)/ngo-login");
-        }, 2000); // Wait 2 seconds before redirecting
+        }, 2000);
       } else {
         throw new Error(responseData.msg || "An unknown server error occurred.");
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
       showAlert("Submission Failed", errorMessage, "error");
+      setReviewVisible(false); // Go back to the form if submission fails
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // --- FIX: Single, complete JSX return statement ---
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.header}>Request NGO Account</Text>
+      {isReviewVisible ? (
+        // --- REVIEW VIEW ---
+        <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+          <Text style={styles.header}>Confirm Your Details</Text>
+          <ReviewRow label="NGO Name" value={formData.ngoName} />
+          <ReviewRow label="Registration ID" value={formData.registrationId} />
+          <ReviewRow label="Email for Login" value={formData.email} />
+          <ReviewRow label="Contact Number" value={formData.contactNumber} />
+          <ReviewRow label="Location" value={formData.location} />
+          <ReviewRow label="Description" value={formData.description} />
+          <ReviewRow label="Password" value={"*".repeat(formData.password.length)} />
+          <ReviewRow label="PIN Code" value={formData.pinCode} />
+          <ReviewRow label="Document" value={document?.fileName || "N/A"} />
 
-        <TextInput
-          style={[styles.input, errors.ngoName && styles.inputError]}
-          placeholder="NGO Name"
-          placeholderTextColor="#b94e4e"
-          value={formData.ngoName}
-          onChangeText={(val) => handleChange("ngoName", val)}
-          onBlur={() => handleBlur("ngoName")}
-        />
-        {errors.ngoName && <Text style={styles.errorText}>{errors.ngoName}</Text>}
-
-        <TextInput
-          style={[styles.input, errors.registrationId && styles.inputError]}
-          placeholder="NGO ID/Registration Number"
-          placeholderTextColor="#b94e4e"
-          value={formData.registrationId}
-          onChangeText={(val) => handleChange("registrationId", val)}
-          onBlur={() => handleBlur("registrationId")}
-        />
-        {errors.registrationId && <Text style={styles.errorText}>{errors.registrationId}</Text>}
-
-        <TextInput
-          style={[styles.input, styles.textArea, errors.description && styles.inputError]}
-          placeholder="Brief Description of NGO's Work"
-          placeholderTextColor="#b94e4e"
-          multiline
-          value={formData.description}
-          onChangeText={(val) => handleChange("description", val)}
-          onBlur={() => handleBlur("description")}
-        />
-        {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
-
-        <TextInput
-          style={[styles.input, errors.contactNumber && styles.inputError]}
-          placeholder="Contact Number (10 digits)"
-          placeholderTextColor="#b94e4e"
-          value={formData.contactNumber}
-          onChangeText={(val) => handleChange("contactNumber", val)}
-          onBlur={() => handleBlur("contactNumber")}
-          keyboardType="phone-pad"
-          maxLength={10}
-        />
-        {errors.contactNumber && <Text style={styles.errorText}>{errors.contactNumber}</Text>}
-
-        <TextInput
-          style={[styles.input, errors.email && styles.inputError]}
-          placeholder="Email Address for Login"
-          placeholderTextColor="#b94e4e"
-          value={formData.email}
-          onChangeText={(val) => handleChange("email", val)}
-          onBlur={() => handleBlur("email")}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
-
-        <TextInput
-          style={[styles.input, errors.location && styles.inputError]}
-          placeholder="Location/Region of Operation"
-          placeholderTextColor="#b94e4e"
-          value={formData.location}
-          onChangeText={(val) => handleChange("location", val)}
-          onBlur={() => handleBlur("location")}
-        />
-        {errors.location && <Text style={styles.errorText}>{errors.location}</Text>}
-
-        <View style={[styles.input, styles.passwordContainer, errors.password && styles.inputError]}>
-          <TextInput
-            style={styles.passwordInput}
-            placeholder="Set Account Password"
-            placeholderTextColor="#b94e4e"
-            value={formData.password}
-            onChangeText={(val) => handleChange("password", val)}
-            onBlur={() => handleBlur("password")}
-            secureTextEntry={!isPasswordVisible}
+          <CustomButton
+            title={isSubmitting ? "Submitting..." : "Confirm & Submit Request"}
+            onPress={handleConfirmAndSubmit}
+            disabled={isSubmitting}
+            style={styles.submitButton}
+            showActivityIndicator={isSubmitting}
           />
-          <TouchableOpacity onPress={() => setIsPasswordVisible((prev) => !prev)}>
-            <Ionicons name={isPasswordVisible ? "eye-off" : "eye"} size={24} color="#850a0a" />
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => setReviewVisible(false)}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.editButtonText}>Edit Details</Text>
           </TouchableOpacity>
-        </View>
-        {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+        </ScrollView>
+      ) : (
+        // --- FORM VIEW ---
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.header}>Request NGO Account</Text>
 
-        <View style={[styles.input, errors.pinCode && styles.inputError]}>
-            <TextInput
-                style={styles.passwordInput}
-                placeholder="Set 6-digit PIN Code"
-                placeholderTextColor="#b94e4e"
-                value={formData.pinCode}
-                onChangeText={(val) => handleChange("pinCode", val)}
-                onBlur={() => handleBlur("pinCode")}
-                
-                keyboardType="numeric"
-                maxLength={6}
-            />
-        </View>
-        {errors.pinCode && <Text style={styles.errorText}>{errors.pinCode}</Text>}
+          <TextInput style={[styles.input, errors.ngoName && styles.inputError]} placeholder="NGO Name" placeholderTextColor="#b94e4e" value={formData.ngoName} onChangeText={(val) => handleChange("ngoName", val)} onBlur={() => handleBlur("ngoName")}/>
+          {errors.ngoName && <Text style={styles.errorText}>{errors.ngoName}</Text>}
 
-        {!document ? (
-          <TouchableOpacity style={[styles.uploadButton, errors.document && styles.inputError]} onPress={pickDocument}>
-            <Ionicons name="cloud-upload-outline" size={24} color="#FFFFFF" />
-            <Text style={styles.uploadButtonText}>Upload Registration Proof</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={[styles.fileDisplayContainer, errors.document && styles.inputError]}>
-            <Ionicons name="document-attach-outline" size={24} color="#3A0000" />
-            <Text style={styles.fileNameText} numberOfLines={1}>{document.fileName}</Text>
-            <TouchableOpacity onPress={() => setDocument(null)}>
-              <Ionicons name="close-circle" size={24} color="#850a0a" />
+          <TextInput style={[styles.input, errors.registrationId && styles.inputError]} placeholder="NGO ID/Registration Number" placeholderTextColor="#b94e4e" value={formData.registrationId} onChangeText={(val) => handleChange("registrationId", val)} onBlur={() => handleBlur("registrationId")}/>
+          {errors.registrationId && <Text style={styles.errorText}>{errors.registrationId}</Text>}
+          
+          <TextInput style={[styles.input, styles.textArea, errors.description && styles.inputError]} placeholder="Brief Description of NGO's Work" placeholderTextColor="#b94e4e" multiline value={formData.description} onChangeText={(val) => handleChange("description", val)} onBlur={() => handleBlur("description")}/>
+          {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
+          
+          <TextInput style={[styles.input, errors.contactNumber && styles.inputError]} placeholder="Contact Number (10 digits)" placeholderTextColor="#b94e4e" value={formData.contactNumber} onChangeText={(val) => handleChange("contactNumber", val)} onBlur={() => handleBlur("contactNumber")} keyboardType="phone-pad" maxLength={10}/>
+          {errors.contactNumber && <Text style={styles.errorText}>{errors.contactNumber}</Text>}
+          
+          <TextInput style={[styles.input, errors.email && styles.inputError]} placeholder="Email Address for Login" placeholderTextColor="#b94e4e" value={formData.email} onChangeText={(val) => handleChange("email", val)} onBlur={() => handleBlur("email")} keyboardType="email-address" autoCapitalize="none"/>
+          {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+          
+          <TextInput style={[styles.input, errors.location && styles.inputError]} placeholder="Location/Region of Operation" placeholderTextColor="#b94e4e" value={formData.location} onChangeText={(val) => handleChange("location", val)} onBlur={() => handleBlur("location")}/>
+          {errors.location && <Text style={styles.errorText}>{errors.location}</Text>}
+          
+          <View style={[styles.input, styles.passwordContainer, errors.password && styles.inputError]}>
+            <TextInput style={styles.passwordInput} placeholder="Set Account Password" placeholderTextColor="#b94e4e" value={formData.password} onChangeText={(val) => handleChange("password", val)} onBlur={() => handleBlur("password")} secureTextEntry={!isPasswordVisible}/>
+            <TouchableOpacity onPress={() => setIsPasswordVisible((prev) => !prev)}>
+              <Ionicons name={isPasswordVisible ? "eye-off" : "eye"} size={24} color="#850a0a" />
             </TouchableOpacity>
           </View>
-        )}
-        {errors.document && <Text style={styles.errorText}>{errors.document}</Text>}
+          {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+          
+          <TextInput style={[styles.input, errors.pinCode && styles.inputError]} placeholder="Set 6-digit PIN Code" placeholderTextColor="#b94e4e" value={formData.pinCode} onChangeText={(val) => handleChange("pinCode", val)} onBlur={() => handleBlur("pinCode")}  keyboardType="numeric" maxLength={6}/>
+          {errors.pinCode && <Text style={styles.errorText}>{errors.pinCode}</Text>}
 
-        <CustomButton
-          title={isSubmitting ? "Submitting..." : "Submit for Verification"}
-          onPress={handleSubmit}
-          disabled={isSubmitting}
-          style={styles.submitButton}
-          textStyle={styles.submitButtonText}
-          showActivityIndicator={isSubmitting} // Pass this prop if your CustomButton supports it
-        />
-      </ScrollView>
+          {!document ? (
+            <TouchableOpacity style={[styles.uploadButton, errors.document && styles.inputError]} onPress={pickDocument}>
+              <Ionicons name="cloud-upload-outline" size={24} color="#FFFFFF" />
+              <Text style={styles.uploadButtonText}>Upload Registration Proof</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={[styles.fileDisplayContainer, errors.document && styles.inputError]}>
+              <Ionicons name="document-attach-outline" size={24} color="#3A0000" />
+              <Text style={styles.fileNameText} numberOfLines={1}>{document.fileName}</Text>
+              <TouchableOpacity onPress={() => setDocument(null)}>
+                <Ionicons name="close-circle" size={24} color="#850a0a" />
+              </TouchableOpacity>
+            </View>
+          )}
+          {errors.document && <Text style={styles.errorText}>{errors.document}</Text>}
+          
+          <CustomButton
+            title="Review Request Details"
+            onPress={handleProceedToReview}
+            disabled={isSubmitting}
+            style={styles.submitButton}
+          />
+        </ScrollView>
+      )}
 
       <CustomAlert
         visible={alert.visible}
@@ -378,11 +298,10 @@ export default function SubmitRequestScreen() {
   );
 }
 
-// Styles remain unchanged
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#FFFBF8" },
   container: { flex: 1 },
-  scrollContent: { padding: 20 },
+  scrollContent: { padding: 20, paddingBottom: 40 },
   header: {
     fontSize: 24,
     fontWeight: "bold",
@@ -408,7 +327,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  passwordInput: { flex: 1, height: "100%", color: "#3A0000" },
+  passwordInput: { flex: 1, height: "100%", color: "#3A0000", fontSize: 16 },
   uploadButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -458,5 +377,35 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginTop: -10,
     paddingLeft: 5,
+  },
+  // --- Styles for the Review Screen ---
+  reviewRow: {
+    backgroundColor: '#FFFFFF',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#F0E0E0',
+  },
+  reviewLabel: {
+    fontSize: 14,
+    color: '#A47171',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  reviewValue: {
+    fontSize: 16,
+    color: '#3A0000',
+  },
+  editButton: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  editButtonText: {
+    fontSize: 16,
+    color: '#850a0a',
+    fontWeight: 'bold',
   },
 });
