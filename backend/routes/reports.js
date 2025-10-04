@@ -1,5 +1,3 @@
-// backend/routes/reports.js
-
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
@@ -14,19 +12,36 @@ if (!fs.existsSync(reportUploadsDir)) {
     fs.mkdirSync(reportUploadsDir, { recursive: true });
 }
 
+// This storage engine ensures that every uploaded image is saved with a
+// unique name AND the correct file extension (.jpg or .png).
+// This is critical for the Python AI server to be able to find and process the images.
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         cb(null, reportUploadsDir);
     },
+    // --- START OF THE FIX ---
     filename: function (req, file, cb) {
-        cb(null, Date.now() + '-' + file.originalname.replace(/\s/g, '_'));
+        // Create a new, unique, and safe filename.
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        
+        // Determine the correct file extension from the file's mimetype.
+        let extension = '.jpg'; // Default to .jpg
+        if (file.mimetype === 'image/png') {
+            extension = '.png';
+        }
+        
+        // Combine the unique name and the correct extension.
+        // Example result: '1678886400000-123456789.jpg'
+        cb(null, uniqueSuffix + extension);
     }
+    // --- END OF THE FIX ---
 });
 
 const upload = multer({
     storage: storage,
     limits: { fileSize: 5 * 1024 * 1024 }, // 5MB file size limit
     fileFilter: (req, file, cb) => {
+        // This filter remains the same, it correctly checks the mimetype.
         if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/png' || file.mimetype === 'image/jpg') {
             cb(null, true);
         } else {
@@ -55,9 +70,14 @@ router.post('/', (req, res) => {
             return res.status(400).json({ msg: `File upload error: ${err.message}` });
         }
 
+        // --- HELPFUL DEBUG LOG ---
+        // This will show you exactly what file multer saved to the disk.
+        // Check your terminal to confirm the filename has a .jpg or .png extension!
+        console.log('✅ Multer saved file info:', req.file);
+        // --- END OF LOG ---
+
         const { user, person_name, gender, age, last_seen, description, relationToReporter, reporterContact, familyEmail, pinCode } = req.body;
         
-        // Added a log to see exactly what the backend receives
         console.log('[POST /api/reports] Received body:', req.body);
 
         if (!req.file) {
@@ -68,6 +88,7 @@ router.post('/', (req, res) => {
         }
 
         try {
+            // The photo_url now correctly points to the file saved by multer.
             const photo_url = `uploads/reports/${req.file.filename}`;
             const newReportData = { user, person_name, gender, age, last_seen, description, relationToReporter, reporterContact, photo_url, status: 'Pending Verification', pinCode };
 
@@ -102,15 +123,11 @@ router.post('/', (req, res) => {
 router.get('/', async (req, res) => {
     try {
         const { pinCode } = req.query;
-
-        // Added a log to see if the filter is being applied
         console.log(`[GET /api/reports] Received request with pinCode query: ${pinCode || 'None'}`);
-
         let queryFilter = {};
         if (pinCode) {
             queryFilter.pinCode = pinCode;
         }
-
         const reports = await MissingReport.find(queryFilter)
             .populate('user', 'name email')
             .sort({ reported_at: -1 });
@@ -155,7 +172,6 @@ router.put('/verify/:id', async (req, res) => {
         await report.save();
         
         res.json({ msg: 'Report verified. Notifications have been sent.' });
-
     } catch (err) {
         console.error("🔴 [Backend Error] /api/reports/verify:", err);
         res.status(500).json({ msg: 'Server error during verification.', error: err.message });
@@ -182,7 +198,6 @@ router.put('/reject/:id', async (req, res) => {
         await report.save();
         
         res.json({ msg: 'Report rejected. Notifications have been sent.' });
-
     } catch (err) {
         console.error("🔴 [Backend Error] /api/reports/reject:", err);
         res.status(500).json({ msg: 'Server error during rejection.', error: err.message });
