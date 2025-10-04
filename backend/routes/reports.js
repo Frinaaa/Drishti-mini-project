@@ -8,7 +8,7 @@ const { MissingReport, Role, User, Notification } = require('../models');
 
 // --- MULTER CONFIGURATION FOR IMAGE UPLOADS ---
 const reportUploadsDir = path.join(__dirname, '..', 'uploads', 'reports');
-if (!fs.existsSync(reportUploadsDir)) {
+if (!fs.existsSync(reportUploadsDir))  {
     fs.mkdirSync(reportUploadsDir, { recursive: true });
 }
 
