@@ -12,36 +12,24 @@ if (!fs.existsSync(reportUploadsDir))  {
     fs.mkdirSync(reportUploadsDir, { recursive: true });
 }
 
-// This storage engine ensures that every uploaded image is saved with a
-// unique name AND the correct file extension (.jpg or .png).
-// This is critical for the Python AI server to be able to find and process the images.
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         cb(null, reportUploadsDir);
     },
-    // --- START OF THE FIX ---
     filename: function (req, file, cb) {
-        // Create a new, unique, and safe filename.
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        
-        // Determine the correct file extension from the file's mimetype.
-        let extension = '.jpg'; // Default to .jpg
+        let extension = '.jpg';
         if (file.mimetype === 'image/png') {
             extension = '.png';
         }
-        
-        // Combine the unique name and the correct extension.
-        // Example result: '1678886400000-123456789.jpg'
         cb(null, uniqueSuffix + extension);
     }
-    // --- END OF THE FIX ---
 });
 
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB file size limit
+    limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-        // This filter remains the same, it correctly checks the mimetype.
         if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/png' || file.mimetype === 'image/jpg') {
             cb(null, true);
         } else {
@@ -70,11 +58,7 @@ router.post('/', (req, res) => {
             return res.status(400).json({ msg: `File upload error: ${err.message}` });
         }
 
-        // --- HELPFUL DEBUG LOG ---
-        // This will show you exactly what file multer saved to the disk.
-        // Check your terminal to confirm the filename has a .jpg or .png extension!
         console.log('✅ Multer saved file info:', req.file);
-        // --- END OF LOG ---
 
         const { user, person_name, gender, age, last_seen, description, relationToReporter, reporterContact, familyEmail, pinCode } = req.body;
         
@@ -88,7 +72,6 @@ router.post('/', (req, res) => {
         }
 
         try {
-            // The photo_url now correctly points to the file saved by multer.
             const photo_url = `uploads/reports/${req.file.filename}`;
             const newReportData = { user, person_name, gender, age, last_seen, description, relationToReporter, reporterContact, photo_url, status: 'Pending Verification', pinCode };
 
@@ -151,7 +134,27 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-// --- UPDATE STATUS ROUTES (VERIFY / REJECT) ---
+// --- NEW ENDPOINT TO SUPPORT FACE SEARCH ---
+// @route   GET /api/reports/by-filename/:filename
+// @desc    Get a single report by its associated photo filename
+router.get('/by-filename/:filename', async (req, res) => {
+    try {
+        // Use a regex to find a report where the photo_url contains the filename
+        const report = await MissingReport.findOne({ 
+            photo_url: { $regex: req.params.filename, $options: 'i' } 
+        }).populate('user', 'name email'); // Populate the user who reported it
+
+        if (!report) {
+            return res.status(404).json({ msg: 'Report not found for this image filename.' });
+        }
+        res.json(report);
+    } catch (err) {
+        console.error('🔴 Server Error (fetching report by filename):', err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// --- UPDATE STATUS ROUTES (VERIFY / REJECT / FOUND) ---
 
 // @route   PUT /api/reports/verify/:id
 router.put('/verify/:id', async (req, res) => {
@@ -178,7 +181,6 @@ router.put('/verify/:id', async (req, res) => {
     }
 });
 
-
 // @route   PUT /api/reports/reject/:id
 router.put('/reject/:id', async (req, res) => {
     try {
@@ -201,6 +203,43 @@ router.put('/reject/:id', async (req, res) => {
     } catch (err) {
         console.error("🔴 [Backend Error] /api/reports/reject:", err);
         res.status(500).json({ msg: 'Server error during rejection.', error: err.message });
+    }
+});
+
+// @route   PUT /api/reports/found/:id
+// @desc    Mark a report as 'Found' and notify stakeholders
+router.put('/found/:id', async (req, res) => {
+    try {
+        const report = await MissingReport.findById(req.params.id).populate('user', 'name email');
+        if (!report) { return res.status(404).json({ msg: 'Report not found.' }); }
+
+        // Update the status to 'Found'
+        report.status = 'Found';
+        await report.save();
+        
+        const successMessage = `Wonderful news! ${report.person_name} has been found. The report status is updated and notifications are being sent.`;
+
+        // Send notifications
+        if (report.familyEmail) {
+            const mailOptions = { 
+                from: process.env.EMAIL_USER, 
+                to: report.familyEmail, 
+                subject: `Wonderful News: ${report.person_name} has been Found!`, 
+                text: `Dear Family Member,\n\nWe are overjoyed to inform you that ${report.person_name} has been found.\n\nThis report, submitted by NGO "${report.user.name}", is now marked as 'Found'. Thank you for using our platform.` 
+            };
+            await transporter.sendMail(mailOptions);
+            console.log(`Email notification sent to ${report.familyEmail} for found person.`);
+        } else {
+            const inAppMessage = `Wonderful News! The missing person from your report, "${report.person_name}", has been found.`;
+            const newNotification = new Notification({ recipient: report.user._id, message: inAppMessage });
+            await newNotification.save();
+            console.log(`In-app notification sent to user ${report.user._id} for found person.`);
+        }
+        
+        res.json({ msg: successMessage, report });
+    } catch (err) {
+        console.error("🔴 [Backend Error] /api/reports/found:", err);
+        res.status(500).json({ msg: 'Server error while updating report status to found.', error: err.message });
     }
 });
 

@@ -1,4 +1,3 @@
-//scan-verify.tsx
 import React, {
   useState,
   useEffect,
@@ -19,7 +18,8 @@ import {
   Animated,
 } from "react-native";
 import { CameraView, Camera } from "expo-camera";
-import { useNavigation } from "@react-navigation/native";
+// --- MODIFICATION: Using useRouter for Expo Router navigation ---
+import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { AI_API_URL, BACKEND_API_URL } from "../../config/api";
 
@@ -28,7 +28,7 @@ const { width: screenWidth } = Dimensions.get("window");
 const CAMERA_VIEW_HEIGHT = 350;
 const FRAME_INTERVAL = 300;
 const CONNECTION_TIMEOUT = 8000;
-const MIN_CONFIDENCE_THRESHOLD = 40; // Minimum confidence percentage to show confirm/reject buttons
+const MIN_CONFIDENCE_THRESHOLD = 40;
 
 // --- Types ---
 type StatusType =
@@ -40,13 +40,6 @@ type StatusType =
   | "error"
   | "success"
   | "warning";
-
-interface StatusInfo {
-  message: string;
-  type: StatusType;
-  color: string;
-  animated?: boolean;
-}
 
 interface ReportDetails {
   _id: string;
@@ -165,7 +158,8 @@ const useWebSocketManager = () => {
 
 // --- Main Component ---
 export default function ScanVerifyScreen() {
-  const navigation = useNavigation();
+  // --- MODIFICATION: Using useRouter for navigation ---
+  const router = useRouter();
   const cameraRef = useRef<CameraView>(null);
   const {
     wsRef,
@@ -183,7 +177,6 @@ export default function ScanVerifyScreen() {
   const [faceBox, setFaceBox] = useState<any>(null);
   const [lastPhotoDims, setLastPhotoDims] = useState({ width: 1, height: 1 });
 
-  // Optimized camera frame sending
   const sendFrame = useCallback(async () => {
     if (cameraRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
       try {
@@ -204,12 +197,12 @@ export default function ScanVerifyScreen() {
   const fetchReportDetails = useCallback(
     async (filename: string): Promise<ReportDetails | null> => {
       try {
-        // Extract report ID from filename (assuming format like "timestamp-personName.jpg")
-        // For now, we'll need to search through all reports to find the matching one
-        const response = await fetch(`${BACKEND_API_URL}/reports`);
+        const response = await fetch(`${BACKEND_API_URL}/api/reports`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch reports from the server.');
+        }
         const reports = await response.json();
 
-        // Find the report that contains this filename in its photo_url
         const report = reports.find(
           (r: any) => r.photo_url && r.photo_url.includes(filename)
         );
@@ -223,7 +216,6 @@ export default function ScanVerifyScreen() {
     []
   );
 
-  // Initialize camera permissions
   useEffect(() => {
     const requestPermissions = async () => {
       try {
@@ -242,7 +234,6 @@ export default function ScanVerifyScreen() {
     };
   }, [disconnectWebSocket, frameSenderIntervalRef]);
 
-  // Handle streaming and frame sending
   useEffect(() => {
     if (isStreaming && isCameraReady) {
       frameSenderIntervalRef.current = setInterval(sendFrame, FRAME_INTERVAL);
@@ -279,14 +270,12 @@ export default function ScanVerifyScreen() {
       clearTimeout(connectionTimeout);
       setConnectionAttempts(0);
       updateStatus("✅ Connected! Analyzing faces...", "connected");
-
       setTimeout(() => {
         updateStatus(
           "📹 Streaming active - Position face in camera",
           "streaming"
         );
       }, 1000);
-
       setIsStreaming(true);
     };
 
@@ -329,7 +318,6 @@ export default function ScanVerifyScreen() {
 
         const newMatch = data.match_result;
         if (newMatch?.match_found) {
-          // Only process matches with at least 40% confidence
           const confidencePercentage = newMatch.confidence * 100;
           if (confidencePercentage >= MIN_CONFIDENCE_THRESHOLD) {
             const isAlreadyFound = foundMatches.some(
@@ -337,16 +325,12 @@ export default function ScanVerifyScreen() {
             );
             if (!isAlreadyFound) {
               updateStatus(
-                `🎯 Match found! Confidence: ${confidencePercentage.toFixed(
-                  1
-                )}%`,
+                `🎯 Match found! Confidence: ${confidencePercentage.toFixed(1)}%`,
                 "success",
                 true
               );
 
-              // Fetch report details for this match
               const reportDetails = await fetchReportDetails(newMatch.filename);
-
               const photo = await cameraRef.current?.takePictureAsync({
                 quality: 0.7,
               });
@@ -362,11 +346,8 @@ export default function ScanVerifyScreen() {
               }
             }
           } else {
-            // Low confidence match - show different status
             updateStatus(
-              `⚠️ Potential match (${confidencePercentage.toFixed(
-                1
-              )}%) - below ${MIN_CONFIDENCE_THRESHOLD}% threshold`,
+              `⚠️ Potential match (${confidencePercentage.toFixed(1)}%) - below ${MIN_CONFIDENCE_THRESHOLD}% threshold`,
               "warning"
             );
           }
@@ -402,7 +383,6 @@ export default function ScanVerifyScreen() {
     wsRef,
   ]);
 
-  // Toggle streaming state
   const toggleStreaming = useCallback(() => {
     if (isStreaming) {
       disconnectWebSocket();
@@ -413,29 +393,60 @@ export default function ScanVerifyScreen() {
     }
   }, [isStreaming, disconnectWebSocket, updateStatus, connectWebSocket]);
 
-  // Handle match confirmation/rejection
   const handleConfirmOrReject = useCallback(
-    (isConfirm: boolean, matchToRemove: FoundMatch) => {
-      const title = isConfirm ? "Match Confirmed" : "Match Rejected";
-      const message = isConfirm
-        ? `Notifying authorities about the match with ${matchToRemove.filename}.`
-        : "Thank you for your feedback.";
-
-      Alert.alert(title, message, [
-        {
-          text: "OK",
-          onPress: () => {
-            setFoundMatches((prev) =>
-              prev.filter((m) => m.filename !== matchToRemove.filename)
-            );
+    async (isConfirm: boolean, matchToRemove: FoundMatch) => {
+      if (!isConfirm) {
+        Alert.alert("Match Rejected", "Thank you for your feedback. This result will be dismissed.", [
+          {
+            text: "OK",
+            onPress: () => {
+              setFoundMatches((prev) =>
+                prev.filter((m) => m.filename !== matchToRemove.filename)
+              );
+            },
           },
-        },
-      ]);
+        ]);
+        return;
+      }
+      
+      if (matchToRemove.reportId) {
+        try {
+          const response = await fetch(`${BACKEND_API_URL}/api/reports/found/${matchToRemove.reportId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.msg || 'Failed to update report status on the server.');
+          }
+          
+          Alert.alert("Match Confirmed!", data.msg, [
+            {
+              text: "OK",
+              onPress: () => {
+                setFoundMatches((prev) =>
+                  prev.filter((m) => m.reportId !== matchToRemove.reportId)
+                );
+                // --- MODIFICATION: Navigate to the police reports screen ---
+                router.push('/police/reports');
+              },
+            },
+          ]);
+
+        } catch (error) {
+          console.error("Failed to confirm match:", error);
+          const errorMessage = error instanceof Error ? error.message : "An unknown error occurred."
+          Alert.alert("Confirmation Failed", `Could not update the report status. Reason: ${errorMessage}`);
+        }
+      } else {
+        Alert.alert("Confirmation Error", "Cannot confirm match because the report ID is missing.");
+      }
     },
-    [setFoundMatches]
+    [setFoundMatches, router] // --- MODIFICATION: Added router to dependency array ---
   );
 
-  // Memoized status card component
   const StatusCard = useMemo(
     () => (
       <View
@@ -484,7 +495,8 @@ export default function ScanVerifyScreen() {
       contentContainerStyle={styles.contentContainer}
     >
       <TouchableOpacity
-        onPress={() => navigation.goBack()}
+        // --- MODIFICATION: Using router.back() for navigation ---
+        onPress={() => router.back()}
         style={styles.backButton}
       >
         <Ionicons name="arrow-back" size={24} color="#000" />
@@ -546,7 +558,7 @@ export default function ScanVerifyScreen() {
   );
 }
 
-// --- Memoized Match Card Component ---
+// --- Memoized Match Card Component (No changes here) ---
 const MatchCard = React.memo(
   ({
     match,
@@ -629,7 +641,7 @@ const MatchCard = React.memo(
 );
 MatchCard.displayName = "MatchCard";
 
-// --- Styles ---
+// --- Styles (No changes here) ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   contentContainer: {
@@ -700,39 +712,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     flex: 1,
   },
-  liveIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 4,
-  },
-  liveText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
   statusMessage: {
     fontSize: 15,
     fontWeight: "500",
     textAlign: "center",
     marginBottom: 8,
-  },
-  compactStats: {
-    alignItems: "center",
-  },
-  statsText: {
-    fontSize: 12,
-    fontWeight: "500",
-    opacity: 0.9,
-  },
-  databaseText: {
-    fontSize: 11,
-    fontWeight: "400",
-    opacity: 0.8,
-    marginTop: 2,
   },
   matchListContainer: { marginTop: 10 },
   matchListHeader: { fontSize: 20, fontWeight: "bold", marginBottom: 15 },
