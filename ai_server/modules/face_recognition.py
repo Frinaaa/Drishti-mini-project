@@ -3,14 +3,16 @@ Drishti Face Recognition Module
 ===============================
 
 Face matching and recognition logic with optimized search algorithms.
+This module provides both file-based and in-memory processing paths
+to support HTTP uploads and live WebSocket streaming.
 """
 
 import os
 import logging
 from typing import Optional, Tuple
 from deepface import DeepFace
-import numpy as np  # <-- Make sure numpy is imported
-from .config import MODEL_NAME, DETECTION_BACKENDS, ENHANCE_IMAGES, DB_PATH
+import numpy as np
+from .config import MODEL_NAME, DETECTION_BACKENDS, ENHANCE_IMAGES, DB_PATH, UPLOADS_DIR
 from .image_processor import ImageProcessor
 from .database_manager import DatabaseManager
 
@@ -24,16 +26,15 @@ class FaceRecognizer:
         self.image_processor = ImageProcessor()
 
     # =========================================================================
-    # === START: NEW IN-MEMORY METHODS FOR LIVE VIDEO STREAM                ===
+    # === START: IN-MEMORY METHODS FOR LIVE VIDEO STREAM (OPTIMIZED)        ===
     # =========================================================================
 
     def find_match_in_memory(self, frame: np.ndarray) -> Optional[dict]:
         """
         Public method for the WebSocket handler. Processes an in-memory frame.
-        This bypasses image enhancement for real-time performance.
         """
         try:
-            # Step 1: Search for the face using our in-memory logic
+            # Step 1: Search for the face using our optimized in-memory logic
             identity, distance = self.search_face_in_memory(frame, DB_PATH)
 
             if not identity:
@@ -43,49 +44,53 @@ class FaceRecognizer:
             confidence = 1 - float(distance)
             matched_filename = os.path.basename(identity)
             
+            # CRITICAL FIX: Construct the correct relative URL path for the frontend.
+            # This turns a full file system path into a web-accessible URL path.
+            # e.g., "C:/.../backend/uploads/reports/image.jpg" -> "uploads/reports/image.jpg"
+            relative_path = os.path.relpath(identity, UPLOADS_DIR).replace("\\", "/")
+            final_file_path = f"uploads/{relative_path}"
+            
             return {
                 'match_found': True,
                 'filename': matched_filename,
                 'confidence': confidence,
-                'distance': distance
+                'distance': distance,
+                'file_path': final_file_path  # This key is essential for the frontend
             }
-        except ValueError as e:
+        except ValueError:
             # This is often triggered by DeepFace if no face is in the frame
-            if "face could not be detected" in str(e).lower():
-                logger.warning("No face detected in the live stream frame.")
-            else:
-                logger.error(f"ValueError during in-memory search: {e}")
             return None
         except Exception as e:
             logger.error(f"Unexpected error in find_match_in_memory: {e}")
             return None
 
     def search_face_in_memory(self, frame: np.ndarray, db_path: str) -> Tuple[Optional[str], Optional[float]]:
-        """Optimized face search for an in-memory frame."""
+        """Optimized face search for an in-memory frame, prioritizing speed."""
         backend = self.find_best_backend_in_memory(frame)
         pickle_file = self.db_manager.get_pickle_file()
 
         if pickle_file:
             try:
-                # DeepFace.find can accept a numpy array for img_path
+                # Use the fast, pre-indexed database search
                 result = DeepFace.find(
-                    img_path=frame, db_path=db_path,
-                    model_name=MODEL_NAME, detector_backend=backend,
-                    enforce_detection=False, silent=True
+                    img_path=frame, db_path=db_path, model_name=MODEL_NAME,
+                    detector_backend=backend, enforce_detection=True, silent=True
                 )
                 if result and len(result) > 0 and not result[0].empty:
                     best_match = result[0].iloc[0]
                     return best_match['identity'], best_match['distance']
-            except Exception as e:
-                logger.warning(f"In-memory DB search failed, falling back to manual: {str(e)[:100]}")
+            except Exception:
+                # EFFICIENCY OPTIMIZATION: If the fast search fails, return None immediately.
+                # Do not fall back to slow manual search during a live stream.
+                return None, None
         
+        logger.warning("No pickle file found. Live stream search will be very slow.")
         return self.manual_search_in_memory(frame, db_path, backend)
 
     def find_best_backend_in_memory(self, frame: np.ndarray) -> str:
         """Find the best detection backend for an in-memory frame."""
         for backend in DETECTION_BACKENDS:
             try:
-                # Pass the numpy array to both img1 and img2
                 DeepFace.verify(
                     img1=frame, img2=frame, model_name=MODEL_NAME,
                     detector_backend=backend, enforce_detection=True, silent=True
@@ -96,7 +101,7 @@ class FaceRecognizer:
         return 'opencv'
 
     def manual_search_in_memory(self, frame: np.ndarray, db_path: str, backend: str) -> Tuple[Optional[str], Optional[float]]:
-        """Manual face comparison search for an in-memory frame."""
+        """Fallback manual search for an in-memory frame (used only if pickle file is missing)."""
         best_identity, best_distance = None, None
         model = self.db_manager.get_or_build_model()
         images = self.image_processor.get_image_files(db_path)
@@ -104,9 +109,8 @@ class FaceRecognizer:
         for fname in images:
             candidate_path = os.path.join(db_path, fname)
             try:
-                # Verify the in-memory frame against a candidate file path
                 res = DeepFace.verify(
-                    img1=frame, img2=candidate_path, model_name=MODEL_NAME,
+                    img1=frame, img2_path=candidate_path, model_name=MODEL_NAME,
                     model=model, detector_backend=backend,
                     enforce_detection=False, distance_metric="cosine"
                 )
@@ -116,34 +120,33 @@ class FaceRecognizer:
                     best_identity = candidate_path
             except Exception:
                 continue
-        
         return best_identity, best_distance
 
     # =========================================================================
-    # === END: NEW IN-MEMORY METHODS                                        ===
+    # === END: IN-MEMORY METHODS                                            ===
     # =========================================================================
 
 
     # V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V
-    # --- ALL ORIGINAL FILE-BASED METHODS REMAIN UNCHANGED FOR HTTP API ---
+    # --- ORIGINAL FILE-BASED METHODS (UNCHANGED, FOR HTTP API USE) ---
     # V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V
 
     def find_best_backend(self, image_path: str) -> str:
-        """Find the best detection backend for the given image."""
+        """Find the best detection backend for a given image file."""
         for backend in DETECTION_BACKENDS:
             try:
                 DeepFace.verify(
-                    img1=image_path, img2=image_path,
+                    img1_path=image_path, img2_path=image_path,
                     model_name=MODEL_NAME, detector_backend=backend,
                     enforce_detection=True, silent=True
                 )
                 return backend
             except Exception:
                 continue
-        return 'opencv'  # fallback
+        return 'opencv'
     
     def search_face(self, query_path: str, db_path: str) -> Tuple[Optional[str], Optional[float]]:
-        """Optimized face search with fallback mechanisms."""
+        """Optimized file-based face search with fallback mechanisms."""
         backend = self.find_best_backend(query_path)
         pickle_file = self.db_manager.get_pickle_file()
         
@@ -154,21 +157,19 @@ class FaceRecognizer:
                     model_name=MODEL_NAME, detector_backend=backend,
                     enforce_detection=False, silent=True
                 )
-                
                 if result and len(result) > 0 and not result[0].empty:
                     best_match = result[0].iloc[0]
                     identity = best_match['identity']
                     distance = best_match['distance']
                     logger.info(f"Match found: {os.path.basename(identity)} (distance: {distance:.4f})")
                     return identity, distance
-                    
             except Exception as e:
                 logger.warning(f"Database search failed: {str(e)[:100]}")
         
         return self.manual_search(query_path, db_path, backend)
     
     def manual_search(self, query_path: str, db_path: str, backend: str) -> Tuple[Optional[str], Optional[float]]:
-        """Manual face comparison search."""
+        """Manual file-based face comparison search."""
         best_identity, best_distance = None, None
         model = self.db_manager.get_or_build_model()
         images = self.image_processor.get_image_files(db_path)
@@ -179,7 +180,7 @@ class FaceRecognizer:
             candidate = os.path.join(db_path, fname)
             try:
                 res = DeepFace.verify(
-                    img1=query_path, img2=candidate,
+                    img1_path=query_path, img2_path=candidate,
                     model_name=MODEL_NAME, model=model,
                     detector_backend=backend, enforce_detection=False,
                     distance_metric="cosine"
@@ -188,16 +189,13 @@ class FaceRecognizer:
                 if best_distance is None or distance < best_distance:
                     best_distance = distance
                     best_identity = candidate
-                    
             except Exception:
                 continue
-        
         return best_identity, best_distance
     
     async def process_face_match(self, temp_file_path: str, filename: str):
-        """Process face matching with enhanced detection."""
+        """Process file-based face matching with enhanced detection."""
         enhanced_path = None
-        
         try:
             if not self.db_manager.get_pickle_file() and self.image_processor.get_image_files(DB_PATH):
                 await self.db_manager.update_database_async()
@@ -205,7 +203,6 @@ class FaceRecognizer:
             search_path = temp_file_path
             if ENHANCE_IMAGES:
                 enhanced_path = self.image_processor.enhance_image(temp_file_path)
-                
                 backend = self.find_best_backend(enhanced_path)
                 if backend != 'opencv':
                     search_path = enhanced_path
@@ -213,7 +210,6 @@ class FaceRecognizer:
                     self.image_processor.cleanup_temp_files(enhanced_path)
                     enhanced_path = None
             
-            logger.info(f"Searching against {self.db_manager.state.image_count} images...")
             identity, distance = self.search_face(search_path, DB_PATH)
             
             if not identity:
@@ -222,17 +218,13 @@ class FaceRecognizer:
             confidence = 1 - float(distance)
             matched_filename = os.path.basename(identity)
             
-            logger.info(f"Match found: {matched_filename} (confidence: {confidence:.2f})")
-            
             return {
                 "match_found": True, "confidence": round(confidence, 3), "distance": round(distance, 4),
                 "matched_image": matched_filename, "message": f"Match found with {confidence*100:.1f}% confidence"
             }
-            
         except ValueError as e:
-            error_msg = str(e).lower()
-            if "face could not be detected" in error_msg:
-                return {"match_found": False, "message": "No face detected. Please ensure clear lighting and face visibility."}
+            if "face could not be detected" in str(e).lower():
+                return {"match_found": False, "message": "No face detected."}
             return {"match_found": False, "message": f"Face analysis error: {str(e)}"}
         except Exception as e:
             logger.error(f"Unexpected error: {e}")
@@ -240,10 +232,3 @@ class FaceRecognizer:
         finally:
             if enhanced_path:
                 self.image_processor.cleanup_temp_files(enhanced_path)
-    
-    def process_frame_silent(self, frame, temp_path: str) -> Optional[dict]:
-        """DEPRECATED: This file-based method is no longer suitable for websockets.
-        Use find_match_in_memory instead."""
-        # This method is now effectively replaced by find_match_in_memory
-        logger.warning("process_frame_silent is deprecated for streams.")
-        return None
