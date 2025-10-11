@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "backend": "nodemon backend/server.js",
-    "db:seed": "node backend/seed.js"
+    "db:seed": "node backend/seed.js",
+  "ai": "cd ai_server && uvicorn main:app --reload"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",

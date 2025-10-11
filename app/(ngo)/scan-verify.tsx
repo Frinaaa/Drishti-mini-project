@@ -1,231 +1,834 @@
-// app/ngo/scan-verify.tsx
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator, Platform, ScrollView } from 'react-native';
-import { Camera } from 'expo-camera'; // Correct import for new versions
-import { useNavigation } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+//scan-verify.tsx
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  Alert,
+  Platform,
+  ScrollView,
+  Dimensions,
+  Animated,
+} from "react-native";
+import { CameraView, Camera } from "expo-camera";
+import { useNavigation } from "@react-navigation/native";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { AI_API_URL, BACKEND_API_URL } from "../../config/api";
 
-// !! IMPORTANT: Replace with your AI server's actual IP address and port !!
-const AI_SERVER_URL = "http://192.168.1.10:8000"; // Example: Use your computer's local IP
-const API_BASE_URL = "http://192.168.1.10:3000"; // !! Your main backend URL for serving images !!
+// --- Constants and Types ---
+const { width: screenWidth } = Dimensions.get("window");
+const CAMERA_VIEW_HEIGHT = 350;
+const FRAME_INTERVAL = 300;
+const CONNECTION_TIMEOUT = 8000;
+const MIN_CONFIDENCE_THRESHOLD = 40; // Minimum confidence percentage to show confirm/reject buttons
 
-export default function ScanVerifyScreen() {
-  const navigation = useNavigation();
-  const cameraRef = useRef<camera>(null);
-  
-  // State for camera and permissions
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [isScanning, setIsScanning] = useState(false);
-  const [isProcessingFrame, setIsProcessingFrame] = useState(false);
-  
-  // State for match results
-  const [matchResult, setMatchResult] = useState<any>(null);
-  const [cctvCapturedFaceUri, setCctvCapturedFaceUri] = useState<string | null>(null);
-  
-  // State for user feedback
-  const [statusMessage, setStatusMessage] = useState("Tap 'Start Scanning' to begin");
-  const [backendError, setBackendError] = useState<string | null>(null);
-  
-  useEffect(() => {
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
-    })();
+// --- Types ---
+type StatusType =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "streaming"
+  | "processing"
+  | "error"
+  | "success"
+  | "warning";
+
+interface StatusInfo {
+  message: string;
+  type: StatusType;
+  color: string;
+  animated?: boolean;
+}
+
+interface ReportDetails {
+  _id: string;
+  person_name: string;
+  age: number;
+  gender: string;
+  last_seen: string;
+  description: string;
+  status: string;
+  reported_at: string;
+  pinCode: string;
+}
+
+interface FoundMatch {
+  filename: string;
+  confidence: number;
+  file_path: string;
+  liveCaptureUri: string;
+  reportDetails?: ReportDetails;
+  reportId?: string;
+}
+
+interface StatusInfo {
+  message: string;
+  type:
+    | "idle"
+    | "connecting"
+    | "connected"
+    | "streaming"
+    | "processing"
+    | "error"
+    | "success"
+    | "warning";
+  color: string;
+  icon?: string;
+  animated?: boolean;
+}
+
+const STATUS_CONFIG = {
+  idle: { color: "#666", bgColor: "#f5f5f5", icon: "radio-button-unchecked" },
+  connecting: { color: "#ff9800", bgColor: "#fff3e0", icon: "wifi" },
+  connected: { color: "#2196f3", bgColor: "#e3f2fd", icon: "wifi" },
+  streaming: { color: "#4caf50", bgColor: "#e8f5e8", icon: "videocam" },
+  processing: { color: "#ff9800", bgColor: "#fff3e0", icon: "search" },
+  error: { color: "#f44336", bgColor: "#ffebee", icon: "error" },
+  success: { color: "#4caf50", bgColor: "#e8f5e8", icon: "check-circle" },
+  warning: { color: "#ff9800", bgColor: "#fff3e0", icon: "warning" },
+} as const;
+
+// --- Custom Hooks ---
+const useStatusManager = () => {
+  const [currentStatus, setCurrentStatus] = useState<StatusInfo>({
+    message: "Tap 'Start Live Scan' to begin",
+    type: "idle",
+    color: STATUS_CONFIG.idle.color,
+  });
+  const pulseAnimation = useRef(new Animated.Value(1)).current;
+
+  const startPulseAnimation = useCallback(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnimation, {
+          toValue: 1.2,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnimation, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [pulseAnimation]);
+
+  const updateStatus = useCallback(
+    (message: string, type: StatusType, animated: boolean = false) => {
+      setCurrentStatus({
+        message,
+        type,
+        color: STATUS_CONFIG[type].color,
+        animated,
+      });
+      if (animated) {
+        startPulseAnimation();
+      }
+    },
+    [startPulseAnimation]
+  );
+
+  return { currentStatus, updateStatus, pulseAnimation };
+};
+
+const useWebSocketManager = () => {
+  const wsRef = useRef<WebSocket | null>(null);
+  const frameSenderIntervalRef = useRef<number | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [connectionAttempts, setConnectionAttempts] = useState(0);
+
+  const disconnectWebSocket = useCallback(() => {
+    wsRef.current?.close();
+    wsRef.current = null;
+    setIsStreaming(false);
   }, []);
 
-  const sendFrameForMatching = async () => {
-    if (!cameraRef.current || isProcessingFrame) return;
-
-    setIsProcessingFrame(true);
-    setBackendError(null);
-
-    try {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.5,
-        base64: true,
-        skipProcessing: true,
-      });
-
-      if (!photo.base64) {
-        setIsProcessingFrame(false);
-        return;
-      }
-
-      // We use FormData because it's robust for sending file data
-      const formData = new FormData();
-      formData.append('file_data', photo.base64);
-
-      setStatusMessage("Searching database...");
-
-      const response = await fetch(`${AI_SERVER_URL}/find_match_react_native`, {
-        method: 'POST',
-        body: formData,
-      });
-      
-      const result = await response.json();
-
-      if (!response.ok) {
-        setBackendError(result.detail || "An unknown server error occurred.");
-        // If a face isn't detected, it's not a critical error, just feedback
-        if (response.status === 400) {
-            setStatusMessage(result.detail);
-        }
-      } else {
-        if (result.match_found) {
-          // We found a match! Stop scanning and show the result.
-          console.log("Match Found:", result);
-          setIsScanning(false);
-          setMatchResult(result);
-          setCctvCapturedFaceUri(photo.uri);
-          setStatusMessage(result.message || "Match Found!");
-        } else {
-          // No match found, continue scanning
-          setStatusMessage("No match found. Keep scanning...");
-          setMatchResult(null);
-          setCctvCapturedFaceUri(null);
-        }
-      }
-    } catch (error) {
-      console.error("Error sending frame to AI server:", error);
-      setBackendError("Network Error. Check AI server IP and connection.");
-    } finally {
-      // Wait a moment before allowing the next scan
-      setTimeout(() => setIsProcessingFrame(false), 1000);
-    }
+  return {
+    wsRef,
+    frameSenderIntervalRef,
+    isStreaming,
+    setIsStreaming,
+    connectionAttempts,
+    setConnectionAttempts,
+    disconnectWebSocket,
   };
+};
 
+// --- Main Component ---
+export default function ScanVerifyScreen() {
+  const navigation = useNavigation();
+  const cameraRef = useRef<CameraView>(null);
+  const {
+    wsRef,
+    frameSenderIntervalRef,
+    isStreaming,
+    setIsStreaming,
+    connectionAttempts,
+    setConnectionAttempts,
+    disconnectWebSocket,
+  } = useWebSocketManager();
+  const { currentStatus, updateStatus, pulseAnimation } = useStatusManager();
+
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [foundMatches, setFoundMatches] = useState<FoundMatch[]>([]);
+  const [faceBox, setFaceBox] = useState<any>(null);
+  const [lastPhotoDims, setLastPhotoDims] = useState({ width: 1, height: 1 });
+
+  // Optimized camera frame sending
+  const sendFrame = useCallback(async () => {
+    if (cameraRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
+      try {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.3,
+          base64: true,
+        });
+        if (photo?.base64) {
+          setLastPhotoDims({ width: photo.width, height: photo.height });
+          wsRef.current.send(photo.base64);
+        }
+      } catch {
+        console.warn("Error sending frame");
+      }
+    }
+  }, [cameraRef, wsRef]);
+
+  const fetchReportDetails = useCallback(
+    async (filename: string): Promise<ReportDetails | null> => {
+      try {
+        // Extract report ID from filename (assuming format like "timestamp-personName.jpg")
+        // For now, we'll need to search through all reports to find the matching one
+        const response = await fetch(`${BACKEND_API_URL}/reports`);
+        const reports = await response.json();
+
+        // Find the report that contains this filename in its photo_url
+        const report = reports.find(
+          (r: any) => r.photo_url && r.photo_url.includes(filename)
+        );
+
+        return report || null;
+      } catch (error) {
+        console.error("Error fetching report details:", error);
+        return null;
+      }
+    },
+    []
+  );
+
+  // Initialize camera permissions
   useEffect(() => {
-    let scanTimeout: NodeJS.Timeout | null = null;
-    if (isScanning && hasPermission && !isProcessingFrame) {
-      // Continuously call the function with a delay
-      scanTimeout = setTimeout(sendFrameForMatching, 1500);
+    const requestPermissions = async () => {
+      try {
+        await Camera.requestCameraPermissionsAsync();
+      } catch (error) {
+        console.error("Error requesting camera permissions:", error);
+      }
+    };
+    requestPermissions();
+
+    return () => {
+      disconnectWebSocket();
+      if (frameSenderIntervalRef.current) {
+        clearInterval(frameSenderIntervalRef.current);
+      }
+    };
+  }, [disconnectWebSocket, frameSenderIntervalRef]);
+
+  // Handle streaming and frame sending
+  useEffect(() => {
+    if (isStreaming && isCameraReady) {
+      frameSenderIntervalRef.current = setInterval(sendFrame, FRAME_INTERVAL);
     }
     return () => {
-      if (scanTimeout) clearTimeout(scanTimeout);
+      if (frameSenderIntervalRef.current) {
+        clearInterval(frameSenderIntervalRef.current);
+      }
     };
-  }, [isScanning, hasPermission, isProcessingFrame]); // This loop runs the scanner
+  }, [isStreaming, isCameraReady, sendFrame, frameSenderIntervalRef]);
 
-  const toggleScanning = () => {
-    if (isScanning) {
-      setIsScanning(false);
-      setStatusMessage("Scanning Paused.");
-    } else {
-      setIsScanning(true);
-      setStatusMessage("Starting live scan...");
-      // Reset previous results
-      setMatchResult(null);
-      setCctvCapturedFaceUri(null);
-      setBackendError(null);
+  const connectWebSocket = useCallback(() => {
+    if (!AI_API_URL) {
+      updateStatus("API URL not configured. Check config/api.js", "error");
+      return;
     }
-  };
 
-  // Render loading/error states first
-  if (hasPermission === null) {
-    return <View style={styles.container}><ActivityIndicator size="large" color="#800000" /></View>;
-  }
-  if (hasPermission === false) {
-    return <View style={styles.container}><Text>Camera permission is required to scan.</Text></View>;
-  }
-  
-  const matchedImageUri = matchResult?.file_path 
-    ? `${API_BASE_URL}/${matchResult.file_path}`.replace(/\\/g, '/')
-    : null;
+    const wsUrl = AI_API_URL.replace(/^http/, "ws") + "/ws/live_stream";
+    wsRef.current = new WebSocket(wsUrl);
+    updateStatus("🔄 Connecting to server...", "connecting", true);
+
+    const connectionTimeout = setTimeout(() => {
+      if (wsRef.current?.readyState !== WebSocket.OPEN) {
+        updateStatus(
+          `❌ Connection failed (${connectionAttempts} attempts). Check server & network.`,
+          "error"
+        );
+        wsRef.current?.close();
+        setIsStreaming(false);
+      }
+    }, CONNECTION_TIMEOUT);
+
+    wsRef.current.onopen = () => {
+      clearTimeout(connectionTimeout);
+      setConnectionAttempts(0);
+      updateStatus("✅ Connected! Analyzing faces...", "connected");
+
+      setTimeout(() => {
+        updateStatus(
+          "📹 Streaming active - Position face in camera",
+          "streaming"
+        );
+      }, 1000);
+
+      setIsStreaming(true);
+    };
+
+    wsRef.current.onmessage = async (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.face_detected && data.face_box) {
+          const { width: photoWidth, height: photoHeight } = lastPhotoDims;
+          const scaleX = screenWidth / photoWidth;
+          const scaleY = CAMERA_VIEW_HEIGHT / photoHeight;
+          setFaceBox({
+            top: data.face_box.y * scaleY,
+            left: data.face_box.x * scaleX,
+            width: data.face_box.width * scaleX,
+            height: data.face_box.height * scaleY,
+          });
+
+          if (data.match_result?.match_found) {
+            updateStatus("🎯 Processing match result...", "processing", true);
+          } else if (
+            data.match_result === null ||
+            (data.match_result && !data.match_result.match_found)
+          ) {
+            updateStatus(
+              "✅ Face detected - Scanning database images...",
+              "processing"
+            );
+          } else {
+            updateStatus(
+              "👤 Face detected - Scanning database...",
+              "processing",
+              true
+            );
+          }
+        } else {
+          setFaceBox(null);
+          updateStatus("🔍 Looking for faces...", "streaming");
+        }
+
+        const newMatch = data.match_result;
+        if (newMatch?.match_found) {
+          // Only process matches with at least 40% confidence
+          const confidencePercentage = newMatch.confidence * 100;
+          if (confidencePercentage >= MIN_CONFIDENCE_THRESHOLD) {
+            const isAlreadyFound = foundMatches.some(
+              (m) => m.filename === newMatch.filename
+            );
+            if (!isAlreadyFound) {
+              updateStatus(
+                `🎯 Match found! Confidence: ${confidencePercentage.toFixed(
+                  1
+                )}%`,
+                "success",
+                true
+              );
+
+              // Fetch report details for this match
+              const reportDetails = await fetchReportDetails(newMatch.filename);
+
+              const photo = await cameraRef.current?.takePictureAsync({
+                quality: 0.7,
+              });
+
+              if (photo) {
+                const matchWithDetails = {
+                  ...newMatch,
+                  liveCaptureUri: photo.uri,
+                  reportDetails,
+                  reportId: reportDetails?._id,
+                };
+                setFoundMatches((prev) => [matchWithDetails, ...prev]);
+              }
+            }
+          } else {
+            // Low confidence match - show different status
+            updateStatus(
+              `⚠️ Potential match (${confidencePercentage.toFixed(
+                1
+              )}%) - below ${MIN_CONFIDENCE_THRESHOLD}% threshold`,
+              "warning"
+            );
+          }
+        }
+      } catch {
+        updateStatus("⚠️ Processing error - continuing...", "warning");
+      }
+    };
+
+    wsRef.current.onerror = (error) => {
+      clearTimeout(connectionTimeout);
+      updateStatus("❌ Connection error. Check network and server.", "error");
+      setIsStreaming(false);
+    };
+
+    wsRef.current.onclose = (event) => {
+      clearTimeout(connectionTimeout);
+      const reason =
+        event.code === 1000 ? "Server closed connection" : "Connection lost";
+      updateStatus(`🔌 ${reason} - Tap to reconnect`, "warning");
+      setIsStreaming(false);
+      setFaceBox(null);
+    };
+  }, [
+    updateStatus,
+    connectionAttempts,
+    setIsStreaming,
+    setConnectionAttempts,
+    lastPhotoDims,
+    foundMatches,
+    fetchReportDetails,
+    cameraRef,
+    wsRef,
+  ]);
+
+  // Toggle streaming state
+  const toggleStreaming = useCallback(() => {
+    if (isStreaming) {
+      disconnectWebSocket();
+      updateStatus("⏹️ Scan stopped. Tap 'Start' to begin.", "idle");
+    } else {
+      setFoundMatches([]);
+      connectWebSocket();
+    }
+  }, [isStreaming, disconnectWebSocket, updateStatus, connectWebSocket]);
+
+  // Handle match confirmation/rejection
+  const handleConfirmOrReject = useCallback(
+    (isConfirm: boolean, matchToRemove: FoundMatch) => {
+      const title = isConfirm ? "Match Confirmed" : "Match Rejected";
+      const message = isConfirm
+        ? `Notifying authorities about the match with ${matchToRemove.filename}.`
+        : "Thank you for your feedback.";
+
+      Alert.alert(title, message, [
+        {
+          text: "OK",
+          onPress: () => {
+            setFoundMatches((prev) =>
+              prev.filter((m) => m.filename !== matchToRemove.filename)
+            );
+          },
+        },
+      ]);
+    },
+    [setFoundMatches]
+  );
+
+  // Memoized status card component
+  const StatusCard = useMemo(
+    () => (
+      <View
+        style={[
+          styles.statusCard,
+          { backgroundColor: STATUS_CONFIG[currentStatus.type].bgColor },
+        ]}
+      >
+        <View style={styles.statusHeader}>
+          <MaterialIcons
+            name={STATUS_CONFIG[currentStatus.type].icon as any}
+            size={20}
+            color={STATUS_CONFIG[currentStatus.type].color}
+            style={styles.statusIcon}
+          />
+          <Text
+            style={[
+              styles.cardTitle,
+              { color: STATUS_CONFIG[currentStatus.type].color },
+            ]}
+          >
+            {isStreaming ? "Live Scanning" : "Scan Status"}
+          </Text>
+        </View>
+        <Animated.Text
+          style={[
+            styles.statusMessage,
+            {
+              color: STATUS_CONFIG[currentStatus.type].color,
+              transform: currentStatus.animated
+                ? [{ scale: pulseAnimation }]
+                : [{ scale: 1 }],
+            },
+          ]}
+        >
+          {currentStatus.message}
+        </Animated.Text>
+      </View>
+    ),
+    [currentStatus, isStreaming, pulseAnimation]
+  );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+    >
+      <TouchableOpacity
+        onPress={() => navigation.goBack()}
+        style={styles.backButton}
+      >
         <Ionicons name="arrow-back" size={24} color="#000" />
       </TouchableOpacity>
-      <Text style={styles.header}>Live Face Detection</Text>
-      <TouchableOpacity onPress={() => Alert.alert("Help", "This screen continuously scans faces in the live video and compares them against all missing person reports in the database.")} style={styles.helpButton}>
-        <Ionicons name="help-circle-outline" size={24} color="#000" />
-      </TouchableOpacity>
+      <Text style={styles.header}>Live Face Scan</Text>
 
-      {/* Live Camera Feed */}
       <View style={styles.cameraContainer}>
-        <Camera ref={cameraRef} style={styles.camera} facing="back" />
-        <View style={styles.cameraOverlay}>
-          <Text style={styles.cameraOverlayText}>{isScanning ? "Scanning..." : "Ready to Scan"}</Text>
+        <CameraView
+          ref={cameraRef}
+          style={styles.camera}
+          facing="back"
+          onCameraReady={() => setIsCameraReady(true)}
+        />
+        <View style={StyleSheet.absoluteFill}>
+          {faceBox && (
+            <View
+              style={[
+                styles.faceBox,
+                {
+                  top: faceBox.top,
+                  left: faceBox.left,
+                  width: faceBox.width,
+                  height: faceBox.height,
+                },
+              ]}
+            />
+          )}
         </View>
-        <TouchableOpacity style={styles.scanButton} onPress={toggleScanning}>
-          <Text style={styles.scanButtonText}>{isScanning ? "Stop Scanning" : "Start Live Scan"}</Text>
+        <TouchableOpacity style={styles.scanButton} onPress={toggleStreaming}>
+          <Text style={styles.scanButtonText}>
+            {isStreaming ? "Stop Scan" : "Start Live Scan"}
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Results Section */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Scan Results</Text>
-        <View style={styles.resultsContainer}>
-            {/* Left side: Live captured face */}
-            <View style={styles.resultBox}>
-                <Text style={styles.resultLabel}>Live Captured Face</Text>
-                {cctvCapturedFaceUri ? (
-                    <Image source={{ uri: cctvCapturedFaceUri }} style={styles.faceImage} />
-                ) : (
-                    <View style={styles.placeholderImage}><Ionicons name="camera-outline" size={40} color="#ccc" /></View>
-                )}
-            </View>
-            {/* Right side: Matched report photo */}
-            <View style={styles.resultBox}>
-                <Text style={styles.resultLabel}>Matched Report Photo</Text>
-                {matchedImageUri ? (
-                    <Image source={{ uri: matchedImageUri }} style={styles.faceImage} />
-                ) : (
-                    <View style={styles.placeholderImage}><Ionicons name="person-outline" size={40} color="#ccc" /></View>
-                )}
-            </View>
+      {StatusCard}
+
+      {foundMatches.length > 0 && (
+        <View style={styles.matchListContainer}>
+          <Text style={styles.matchListHeader}>
+            Found Matches ({foundMatches.length})
+          </Text>
+          <ScrollView
+            horizontal={true}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.matchListScrollView}
+          >
+            {foundMatches.map((match, index) => (
+              <MatchCard
+                key={`${match.reportId || match.filename}-${index}`}
+                match={match}
+                onAction={handleConfirmOrReject}
+              />
+            ))}
+          </ScrollView>
         </View>
-        
-        {/* Status and Confidence Info */}
-        <View style={styles.matchInfo}>
-            {isScanning && isProcessingFrame && <ActivityIndicator size="small" color="#800000" />}
-            <Text style={styles.statusMessage}>{statusMessage}</Text>
-            {matchResult?.confidence && (
-                <Text style={styles.matchConfidenceText}>
-                    Confidence: {Math.round(matchResult.confidence * 100)}%
-                </Text>
-            )}
-            {backendError && <Text style={styles.errorText}>Error: {backendError}</Text>}
-        </View>
-      </View>
-      
-      <TouchableOpacity
-        style={[styles.continueButton, matchResult ? styles.continueButtonEnabled : styles.continueButtonDisabled]}
-        disabled={!matchResult}
-        onPress={() => Alert.alert("Match Confirmed", `Details for match with ${matchResult.matched_image} can be shown here.`)}
-      >
-        <Text style={styles.continueButtonText}>View Report</Text>
-      </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
 
-// Styles
+// --- Memoized Match Card Component ---
+const MatchCard = React.memo(
+  ({
+    match,
+    onAction,
+  }: {
+    match: FoundMatch;
+    onAction: (isConfirm: boolean, match: FoundMatch) => void;
+  }) => {
+    const confidencePercentage = useMemo(
+      () => (match.confidence * 100).toFixed(1),
+      [match.confidence]
+    );
+    const matchedImageUri = useMemo(
+      () => `${AI_API_URL}/${match.file_path}`,
+      [match.file_path]
+    );
+
+    return (
+      <View style={styles.resultsCard}>
+        <View style={styles.imageComparisonContainer}>
+          <View style={styles.imageBox}>
+            <Text style={styles.imageLabel}>Live Capture</Text>
+            <Image
+              source={{ uri: match.liveCaptureUri }}
+              style={styles.resultImage}
+            />
+          </View>
+          <View style={styles.imageBox}>
+            <Text style={styles.imageLabel}>Database Record</Text>
+            <Image
+              source={{ uri: matchedImageUri }}
+              style={styles.resultImage}
+            />
+          </View>
+        </View>
+        {match.reportDetails && (
+          <View style={styles.reportDetailsContainer}>
+            <Text style={styles.reportTitle}>
+              {match.reportDetails.person_name}
+            </Text>
+            <View style={styles.reportInfo}>
+              <Text style={styles.reportText}>
+                Age: {match.reportDetails.age} | Gender:{" "}
+                {match.reportDetails.gender}
+              </Text>
+              <Text style={styles.reportText}>
+                Status: {match.reportDetails.status}
+              </Text>
+              <Text style={styles.reportText} numberOfLines={2}>
+                Last Seen: {match.reportDetails.last_seen}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Confidence:</Text>
+          <Text style={[styles.detailValue, styles.confidenceText]}>
+            {confidencePercentage}%
+          </Text>
+        </View>
+
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={styles.confirmButton}
+            onPress={() => onAction(true, match)}
+          >
+            <Text style={styles.buttonText}>✓ Confirm Match</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.rejectButton}
+            onPress={() => onAction(false, match)}
+          >
+            <Text style={styles.rejectButtonText}>✗ Not a Match</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+);
+MatchCard.displayName = "MatchCard";
+
+// --- Styles ---
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  contentContainer: { padding: 20, paddingTop: Platform.OS === 'android' ? 40 : 20, paddingBottom: 50 },
-  header: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20, color: '#333' },
-  backButton: { position: 'absolute', top: Platform.OS === 'android' ? 40 : 40, left: 20, zIndex: 10, padding: 5 },
-  helpButton: { position: 'absolute', top: Platform.OS === 'android' ? 40 : 40, right: 20, zIndex: 10, padding: 5 },
-  cameraContainer: { width: '100%', height: 350, backgroundColor: '#000', borderRadius: 10, overflow: 'hidden', marginBottom: 20, justifyContent: 'center', alignItems: 'center', elevation: 3 },
-  camera: { ...StyleSheet.absoluteFillObject },
-  cameraOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' },
-  cameraOverlayText: { color: '#fff', fontSize: 20, fontWeight: 'bold', textShadowColor: 'rgba(0, 0, 0, 0.75)', textShadowOffset: {width: -1, height: 1}, textShadowRadius: 10 },
-  scanButton: { position: 'absolute', bottom: 20, backgroundColor: '#800000', paddingVertical: 12, paddingHorizontal: 25, borderRadius: 30, zIndex: 1, elevation: 5 },
-  scanButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  card: { backgroundColor: '#fff', borderRadius: 10, padding: 15, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3, alignItems: 'center' },
-  cardTitle: { fontSize: 18, fontWeight: '600', marginBottom: 15, color: '#555' },
-  resultsContainer: { flexDirection: 'row', justifyContent: 'space-around', width: '100%' },
-  resultBox: { alignItems: 'center', flex: 1, marginHorizontal: 10 },
-  resultLabel: { fontSize: 14, color: '#666', marginBottom: 8, fontWeight: '500' },
-  faceImage: { width: 120, height: 120, borderRadius: 10, borderWidth: 1, borderColor: '#ddd', backgroundColor: '#e0e0e0' },
-  placeholderImage: { width: 120, height: 120, borderRadius: 10, backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#e0e0e0' },
-  matchInfo: { alignItems: 'center', marginTop: 20, minHeight: 60, width: '100%' },
-  statusMessage: { fontSize: 16, fontWeight: '500', color: '#333', textAlign: 'center' },
-  matchConfidenceText: { fontSize: 18, fontWeight: 'bold', color: '#2e7d32', marginTop: 5 },
-  errorText: { fontSize: 14, color: '#d32f2f', marginTop: 5, textAlign: 'center', fontWeight: 'bold' },
-  continueButton: { paddingVertical: 15, borderRadius: 25, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
-  continueButtonEnabled: { backgroundColor: '#800000' },
-  continueButtonDisabled: { backgroundColor: '#ccc' },
-  continueButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  container: { flex: 1, backgroundColor: "#f5f5f5" },
+  contentContainer: {
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === "android" ? 60 : 40,
+    paddingBottom: 100,
+  },
+  header: {
+    fontSize: 24,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  backButton: {
+    position: "absolute",
+    top: Platform.OS === "android" ? 15 : 0,
+    left: 0,
+    zIndex: 10,
+    padding: 5,
+  },
+  cameraContainer: {
+    width: "100%",
+    height: CAMERA_VIEW_HEIGHT,
+    backgroundColor: "#000",
+    borderRadius: 10,
+    overflow: "hidden",
+    marginBottom: 20,
+    elevation: 3,
+  },
+  camera: { flex: 1 },
+  scanButton: {
+    position: "absolute",
+    bottom: 20,
+    alignSelf: "center",
+    backgroundColor: "#800000",
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: 30,
+    zIndex: 1,
+    elevation: 5,
+  },
+  scanButtonText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  faceBox: {
+    position: "absolute",
+    borderWidth: 2,
+    borderColor: "#00FF00",
+    borderRadius: 5,
+  },
+  statusCard: {
+    borderRadius: 10,
+    padding: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 2,
+    marginBottom: 20,
+  },
+  statusHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  statusIcon: {
+    marginRight: 8,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    flex: 1,
+  },
+  liveIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 4,
+  },
+  liveText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  statusMessage: {
+    fontSize: 15,
+    fontWeight: "500",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  compactStats: {
+    alignItems: "center",
+  },
+  statsText: {
+    fontSize: 12,
+    fontWeight: "500",
+    opacity: 0.9,
+  },
+  databaseText: {
+    fontSize: 11,
+    fontWeight: "400",
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  matchListContainer: { marginTop: 10 },
+  matchListHeader: { fontSize: 20, fontWeight: "bold", marginBottom: 15 },
+  matchListScrollView: { paddingBottom: 10 },
+  resultsCard: {
+    width: screenWidth * 0.85,
+    backgroundColor: "#fff",
+    borderRadius: 15,
+    padding: 15,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    marginRight: 15,
+  },
+  imageComparisonContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 10,
+  },
+  imageBox: { alignItems: "center" },
+  imageLabel: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 8,
+    fontWeight: "500",
+  },
+  resultImage: {
+    width: 110,
+    height: 130,
+    borderRadius: 10,
+    backgroundColor: "#f0f0f0",
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  reportDetailsContainer: {
+    backgroundColor: "#f8f9fa",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: "#007bff",
+  },
+  reportTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#007bff",
+    marginBottom: 6,
+  },
+  reportInfo: {
+    gap: 2,
+  },
+  reportText: {
+    fontSize: 13,
+    color: "#555",
+    lineHeight: 18,
+  },
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  detailLabel: { fontSize: 14, color: "#666", fontWeight: "500" },
+  detailValue: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "bold",
+    flexShrink: 1,
+  },
+  confidenceText: { color: "#2e7d32", fontSize: 16 },
+  actionButtons: {
+    marginTop: 15,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    gap: 10,
+  },
+  confirmButton: {
+    flex: 1,
+    backgroundColor: "#8B0000",
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  rejectButton: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  rejectButtonText: { color: "#666", fontSize: 16, fontWeight: "500" },
 });
