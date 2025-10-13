@@ -33,3 +33,4 @@ CAPTURE_DIR = os.path.join(AI_SERVER_DIR, "capture")
 
 # --- API Configuration ---
 API_BASE_URL = "http://localhost:8000"
+BACKEND_API_URL = "http://localhost:5000"
