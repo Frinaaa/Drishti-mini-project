@@ -12,21 +12,19 @@ import { CameraView, Camera } from "expo-camera";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Progress from "react-native-progress";
-import { AI_API_URL, BACKEND_API_URL } from "../../config/api"; // Import both URLs
+import { AI_API_URL, BACKEND_API_URL } from "../../config/api"; // Ensure both are imported
 import CustomAlert from "@/components/CustomAlert";
 
 // --- UPDATED TYPES ---
-// AI server's initial response
 interface AiMatchResult {
   match_found: boolean;
   confidence: number;
   distance: number;
-  matched_image: string; // Just the filename
-  file_path: string; // Relative path for image URL
+  matched_image: string;
+  file_path: string;
   message: string;
 }
 
-// Report details from our main backend
 interface ReportDetails {
   _id: string;
   person_name: string;
@@ -36,7 +34,6 @@ interface ReportDetails {
   status: string;
 }
 
-// Combined result for displaying in the UI
 interface FullMatchDetails {
   confidence: number;
   aiMessage: string;
@@ -92,19 +89,17 @@ export default function FaceSearchFlowScreen() {
     let progressInterval: any = null;
 
     try {
-      // --- Step 1: Start Progress Simulation ---
       progressInterval = setInterval(() => {
         setProgress((prev) => {
-          if (prev < 0.4) return prev + 0.05; // Preparing & sending photo
-          if (prev < 0.8) return prev + 0.02; // AI Server is processing
-          return 0.9; // Waiting for final details
+          if (prev < 0.4) return prev + 0.05;
+          if (prev < 0.8) return prev + 0.02;
+          return 0.9;
         });
       }, 250);
 
-      // --- Step 2: Call AI Server ---
       const base64 = await convertImageToBase64(photoUri);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
 
       const aiResponse = await fetch(`${AI_API_URL}/find_match_react_native`, {
         method: "POST",
@@ -124,19 +119,17 @@ export default function FaceSearchFlowScreen() {
 
       if (!aiResult.match_found) {
         clearInterval(progressInterval);
-        showCustomAlert("No Match Found", aiResult.message || "Person not found in database. Sighting logged.", "info", () => router.push("/(police)/police-dashboard"));
+        showCustomAlert("No Match Found", aiResult.message || "Person not found. Sighting logged.", "info", () => router.push("/(police)/police-dashboard"));
         return;
       }
 
-      // --- Step 3: Match Found, Now Get Full Details from Main Backend ---
       const detailsResponse = await fetch(`${BACKEND_API_URL}/api/reports/by-filename/${aiResult.matched_image}`);
       if (!detailsResponse.ok) {
-        throw new Error("Match found by AI, but could not retrieve report details from the main server.");
+        throw new Error("Match found, but could not retrieve report details.");
       }
       
       const reportDetails: ReportDetails = await detailsResponse.json();
       
-      // --- Step 4: Combine Results and Update UI ---
       clearInterval(progressInterval);
       setProgress(1.0);
 
@@ -152,13 +145,13 @@ export default function FaceSearchFlowScreen() {
       if (progressInterval) clearInterval(progressInterval);
       setProgress(0);
 
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
       let userMessage = `An unexpected error occurred: ${errorMessage}`;
       
       if (error instanceof Error && error.name === 'AbortError') {
-        userMessage = "The request timed out. The server might be busy or your network connection is unstable. Please try again.";
+        userMessage = "Request timed out. Server might be busy. Please try again.";
       } else if (errorMessage.includes("No face")) {
-        userMessage = "No face was detected in the photo. Please capture a clearer picture with better lighting.";
+        userMessage = "No face detected. Please capture a clearer picture.";
       }
 
       showCustomAlert("Search Failed", userMessage, "error", handleRetake);
@@ -174,12 +167,11 @@ export default function FaceSearchFlowScreen() {
   const handleConfirmOrReject = (isConfirm: boolean) => {
     const title = isConfirm ? "Match Confirmed" : "Match Rejected";
     const message = isConfirm
-      ? `The status for "${matchResult?.details.person_name}" will be updated and relevant parties notified.`
-      : "Thank you for your feedback. This result will be dismissed.";
+      ? `Status for "${matchResult?.details.person_name}" will be updated.`
+      : "Thank you for your feedback.";
     const alertType = isConfirm ? "success" : "info";
 
     showCustomAlert(title, message, alertType, () => {
-      // Here you could call the /api/reports/found/:id endpoint if confirming
       handleRetake();
       router.push("/(police)/police-dashboard");
     });
@@ -307,14 +299,13 @@ export default function FaceSearchFlowScreen() {
   );
 }
 
-// --- STYLES (NO CHANGES HERE) ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFFBF8", paddingHorizontal: 20, paddingTop: 20 },
   centerContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   title: { fontSize: 28, fontWeight: "bold", color: "#3A0000", marginBottom: 20, textAlign: 'center' },
   cameraOuterContainer: { flex: 1, borderRadius: 20, overflow: "hidden", borderWidth: 2, borderColor: "#E4C4C4", marginBottom: 20, backgroundColor: "#000" },
   camera: { flex: 1 },
-  footer: { paddingBottom: 30, alignItems: "center" },
+  footer: { paddingBottom: 30, alignItems: "center", position: 'relative', width: '100%' },
   captureButton: { backgroundColor: "#8B0000", width: 70, height: 70, borderRadius: 35, justifyContent: "center", alignItems: "center", elevation: 4 },
   flipButton: { position: 'absolute', right: 20, bottom: 45 },
   previewContainer: { flex: 1, backgroundColor: "#FFFBF8", padding: 20, justifyContent: "space-between" },

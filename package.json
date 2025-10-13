@@ -3,7 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --go",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
@@ -11,7 +11,7 @@
     "lint": "expo lint",
     "backend": "nodemon backend/server.js",
     "db:seed": "node backend/seed.js",
-  "ai": "cd ai_server && uvicorn main:app --reload"
+    "ai": "cd ai_server && uvicorn main:app --reload"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -29,7 +29,6 @@
     "expo-blur": "~14.1.5",
     "expo-camera": "~17.0.8",
     "expo-constants": "~17.1.7",
-    "expo-dev-client": "~6.0.12",
     "expo-document-picker": "~13.1.6",
     "expo-face-detector": "^13.0.2",
     "expo-font": "~13.3.2",
