@@ -129,10 +129,6 @@ router.get("/", async (req, res) => {
   }
 });
 
-
-// --- THIS IS THE CRITICAL FIX: ROUTE REORDERING ---
-// The specific, non-parameterized routes are now defined BEFORE the general, parameterized routes.
-
 /**
  * @route   GET /api/reports/verified-filenames
  * @desc    Get a list of photo filenames for all 'Verified' reports.
@@ -183,7 +179,6 @@ router.get("/by-filename/:filename", async (req, res) => {
     }
 });
 
-// This general route MUST come last.
 /**
  * @route   GET /api/reports/:id
  * @desc    Get a single report by its ID
@@ -200,9 +195,6 @@ router.get("/:id", async (req, res) => {
       res.status(500).send("Server Error");
     }
 });
-
-// --- END OF FIX ---
-
 
 // --- 4. STATUS UPDATE LOGIC ---
 
@@ -244,13 +236,20 @@ async function updateReportStatus(req, res, newStatus) {
         break;
     }
 
+    // --- FIX: SEPARATE EMAIL AND IN-APP NOTIFICATION LOGIC ---
+    
+    // 1. Send an email if a familyEmail was provided (typically by an NGO)
     if (report.familyEmail) {
       await transporter.sendMail({ from: process.env.EMAIL_USER, to: report.familyEmail, subject, text });
       console.log(`[Email Sent] Status update ('${newStatus}') sent to ${report.familyEmail}.`);
-    } else if (report.user) {
-      await new Notification({ recipient: report.user._id, message: inAppMessage }).save();
-      console.log(`[In-App Notification] Status update ('${newStatus}') sent to user ${report.user._id}.`);
     }
+
+    // 2. ALWAYS send an in-app notification to the original reporter's account (Family or NGO)
+    if (report.user) {
+      await new Notification({ recipient: report.user._id, message: inAppMessage }).save();
+      console.log(`[In-App Notification] Status update ('${newStatus}') created for user ${report.user.name} (${report.user._id}).`);
+    }
+    // --- END OF FIX ---
 
     res.json({ msg: `Report status updated to '${newStatus}'. Notifications sent.` });
   } catch (err) {
@@ -262,6 +261,5 @@ async function updateReportStatus(req, res, newStatus) {
 router.put('/verify/:id', (req, res) => updateReportStatus(req, res, 'Verified'));
 router.put('/reject/:id', (req, res) => updateReportStatus(req, res, 'Rejected'));
 router.put('/found/:id', (req, res) => updateReportStatus(req, res, 'Found'));
-
 
 module.exports = router;
