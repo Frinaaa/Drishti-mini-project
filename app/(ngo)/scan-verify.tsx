@@ -25,7 +25,6 @@ import { AI_API_URL, BACKEND_API_URL } from "../../config/api";
 // --- FIX #1: Import the CustomAlert component ---
 import CustomAlert from "../../components/CustomAlert";
 
-
 // --- (Constants and Types are unchanged) ---
 const { width: screenWidth } = Dimensions.get("window");
 const CAMERA_VIEW_HEIGHT = 350;
@@ -150,7 +149,6 @@ const useWebSocketManager = () => {
   };
 };
 
-
 // --- Main Component ---
 export default function ScanVerifyScreen() {
   const router = useRouter();
@@ -191,7 +189,11 @@ export default function ScanVerifyScreen() {
 
   const hideAlert = () => {
     const callback = alert.onCloseCallback;
-    setAlert((prev) => ({ ...prev, visible: false, onCloseCallback: undefined }));
+    setAlert((prev) => ({
+      ...prev,
+      visible: false,
+      onCloseCallback: undefined,
+    }));
     if (callback) setTimeout(callback, 100);
   };
   // --- END OF FIX ---
@@ -220,16 +222,13 @@ export default function ScanVerifyScreen() {
           `${BACKEND_API_URL}/api/reports/by-filename/${filename}`
         );
         if (!response.ok) {
-          const errorText = await response.text();
-          console.warn(
-            `Could not fetch details for ${filename}: ${errorText}`
-          );
+          console.warn(`Could not fetch details for ${filename}`);
           return null;
         }
         const reportDetails: ReportDetails = await response.json();
         return reportDetails;
       } catch (error) {
-        console.error("Error fetching report details by filename:", error);
+        console.error("Error fetching report details:", error);
         return null;
       }
     },
@@ -410,7 +409,6 @@ export default function ScanVerifyScreen() {
     }
   }, [isStreaming, disconnectWebSocket, updateStatus, connectWebSocket]);
 
-
   // --- FIX #3: Refactor handleConfirmOrReject to use the new showAlert function ---
   const handleConfirmOrReject = useCallback(
     async (isConfirm: boolean, matchToRemove: FoundMatch) => {
@@ -427,9 +425,13 @@ export default function ScanVerifyScreen() {
         );
         return;
       }
-      
-      if (matchToRemove.reportDetails?.status === 'Found') {
-        showAlert("Already Found", "This report has already been marked as 'Found'. No further action is needed.", "info");
+
+      if (matchToRemove.reportDetails?.status === "Found") {
+        showAlert(
+          "Already Found",
+          "This report has already been marked as 'Found'. No further action is needed.",
+          "info"
+        );
         return;
       }
 
@@ -443,30 +445,39 @@ export default function ScanVerifyScreen() {
             }
           );
           const data = await response.json();
+
           if (!response.ok) {
             throw new Error(data.msg || "Failed to update report status.");
           }
-          
-          // Show success alert and define the action to take when it's closed
+
           showAlert("Match Confirmed!", data.msg, "success", () => {
             setFoundMatches((prev) =>
               prev.filter((m) => m.reportId !== matchToRemove.reportId)
             );
             router.push("/(ngo)/ngo-dashboard");
           });
-
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-          showAlert("Confirmation Failed", `Could not update the report. Reason: ${errorMessage}`, "error");
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "An unknown error occurred.";
+          showAlert(
+            "Confirmation Failed",
+            `Could not update the report. Reason: ${errorMessage}`,
+            "error"
+          );
         }
       } else {
-        showAlert("Confirmation Error", "Cannot confirm match because the report ID is missing.", "error");
+        showAlert(
+          "Confirmation Error",
+          "Cannot confirm match because the report ID is missing.",
+          "error"
+        );
       }
     },
     [setFoundMatches, router]
   );
   // --- END OF FIX ---
-
 
   const StatusCard = useMemo(
     () => (
@@ -513,85 +524,100 @@ export default function ScanVerifyScreen() {
 
   return (
     <>
-        <ScrollView
+      <ScrollView
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
+      >
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
         >
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                <Ionicons name="arrow-back" size={24} color="#000" />
-            </TouchableOpacity>
-            <Text style={styles.header}>Live Face Scan</Text>
+          <Ionicons name="arrow-back" size={24} color="#000" />
+        </TouchableOpacity>
+        <Text style={styles.header}>Live Face Scan</Text>
 
-            <View style={styles.cameraContainer}>
-                <CameraView
-                ref={cameraRef}
-                style={styles.camera}
-                facing="back"
-                onCameraReady={() => setIsCameraReady(true)}
-                />
-                <View style={StyleSheet.absoluteFill}>
-                {faceBox && (
-                    <View
-                    style={[
-                        styles.faceBox,
-                        {
-                        top: faceBox.top,
-                        left: faceBox.left,
-                        width: faceBox.width,
-                        height: faceBox.height,
-                        },
-                    ]}
-                    />
-                )}
-                </View>
-                <TouchableOpacity style={styles.scanButton} onPress={toggleStreaming}>
-                <Text style={styles.scanButtonText}>
-                    {isStreaming ? "Stop Scan" : "Start Live Scan"}
-                </Text>
-                </TouchableOpacity>
-            </View>
-
-            {StatusCard}
-
-            {foundMatches.length > 0 && (
-                <View style={styles.matchListContainer}>
-                <Text style={styles.matchListHeader}>
-                    Found Matches ({foundMatches.length})
-                </Text>
-                <ScrollView
-                    horizontal={true}
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.matchListScrollView}
-                >
-                    {foundMatches.map((match, index) => (
-                    <MatchCard
-                        key={`${match.reportId || match.filename}-${index}`}
-                        match={match}
-                        onAction={handleConfirmOrReject}
-                    />
-                    ))}
-                </ScrollView>
-                </View>
+        <View style={styles.cameraContainer}>
+          <CameraView
+            ref={cameraRef}
+            style={styles.camera}
+            facing="back"
+            onCameraReady={() => setIsCameraReady(true)}
+          />
+          <View style={StyleSheet.absoluteFill}>
+            {faceBox && (
+              <View
+                style={[
+                  styles.faceBox,
+                  {
+                    top: faceBox.top,
+                    left: faceBox.left,
+                    width: faceBox.width,
+                    height: faceBox.height,
+                  },
+                ]}
+              />
             )}
-        </ScrollView>
-        {/* --- FIX #4: Render the CustomAlert component --- */}
-        <CustomAlert
-            visible={alert.visible}
-            title={alert.title}
-            message={alert.message}
-            type={alert.type}
-            onClose={hideAlert}
-        />
+          </View>
+          <TouchableOpacity style={styles.scanButton} onPress={toggleStreaming}>
+            <Text style={styles.scanButtonText}>
+              {isStreaming ? "Stop Scan" : "Start Live Scan"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {StatusCard}
+
+        {foundMatches.length > 0 && (
+          <View style={styles.matchListContainer}>
+            <Text style={styles.matchListHeader}>
+              Found Matches ({foundMatches.length})
+            </Text>
+            <ScrollView
+              horizontal={true}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.matchListScrollView}
+            >
+              {foundMatches.map((match, index) => (
+                <MatchCard
+                  key={`${match.reportId || match.filename}-${index}`}
+                  match={match}
+                  onAction={handleConfirmOrReject}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+      </ScrollView>
+      {/* --- FIX #4: Render the CustomAlert component --- */}
+      <CustomAlert
+        visible={alert.visible}
+        title={alert.title}
+        message={alert.message}
+        type={alert.type}
+        onClose={hideAlert}
+      />
     </>
   );
 }
 
 const MatchCard = React.memo(
-  ({ match, onAction }: { match: FoundMatch; onAction: (isConfirm: boolean, match: FoundMatch) => void; }) => {
-    const confidencePercentage = useMemo(() => (match.confidence * 100).toFixed(1), [match.confidence]);
-    const matchedImageUri = useMemo(() => `${AI_API_URL}/${match.file_path}`, [match.file_path]);
-    
-    const isAlreadyFound = match.reportDetails?.status === 'Found';
+  ({
+    match,
+    onAction,
+  }: {
+    match: FoundMatch;
+    onAction: (isConfirm: boolean, match: FoundMatch) => void;
+  }) => {
+    const confidencePercentage = useMemo(
+      () => (match.confidence * 100).toFixed(1),
+      [match.confidence]
+    );
+    const matchedImageUri = useMemo(
+      () => `${AI_API_URL}/${match.file_path}`,
+      [match.file_path]
+    );
+
+    const isAlreadyFound = match.reportDetails?.status === "Found";
 
     return (
       <View style={styles.resultsCard}>
@@ -621,7 +647,12 @@ const MatchCard = React.memo(
                 Age: {match.reportDetails.age} | Gender:{" "}
                 {match.reportDetails.gender}
               </Text>
-              <Text style={[styles.reportText, isAlreadyFound && {color: '#2E7D32', fontWeight: 'bold'}]}>
+              <Text
+                style={[
+                  styles.reportText,
+                  isAlreadyFound && { color: "#2E7D32", fontWeight: "bold" },
+                ]}
+              >
                 Status: {match.reportDetails.status}
               </Text>
               <Text style={styles.reportText} numberOfLines={2}>
@@ -640,11 +671,16 @@ const MatchCard = React.memo(
 
         <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={[styles.confirmButton, isAlreadyFound && styles.disabledButton]}
+            style={[
+              styles.confirmButton,
+              isAlreadyFound && styles.disabledButton,
+            ]}
             onPress={() => onAction(true, match)}
             disabled={isAlreadyFound}
           >
-            <Text style={styles.buttonText}>{isAlreadyFound ? 'Already Found' : '✓ Confirm Match'}</Text>
+            <Text style={styles.buttonText}>
+              {isAlreadyFound ? "Already Found" : "✓ Confirm Match"}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.rejectButton}
@@ -834,6 +870,6 @@ const styles = StyleSheet.create({
   },
   rejectButtonText: { color: "#666", fontSize: 16, fontWeight: "500" },
   disabledButton: {
-    backgroundColor: '#cccccc',
-  }
+    backgroundColor: "#cccccc",
+  },
 });

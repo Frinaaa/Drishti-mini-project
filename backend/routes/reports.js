@@ -65,31 +65,63 @@ const transporter = nodemailer.createTransport({
 router.post("/", (req, res) => {
   upload(req, res, async (err) => {
     if (err) {
-      console.error("🔴 [Multer Error]", err.message);
+      console.error("Multer Error:", err.message);
       return res.status(400).json({ msg: `File upload error: ${err.message}` });
     }
 
-    const requiredFields = [ "user", "person_name", "gender", "age", "last_seen", "relationToReporter", "reporterContact", "pinCode" ];
+    const requiredFields = [
+      "user",
+      "person_name",
+      "gender",
+      "age",
+      "last_seen",
+      "relationToReporter",
+      "reporterContact",
+      "pinCode",
+    ];
     for (const field of requiredFields) {
       if (!req.body[field]) {
-        return res.status(400).json({ msg: `Missing required field: ${field}` });
+        return res
+          .status(400)
+          .json({ msg: `Missing required field: ${field}` });
       }
     }
     if (!req.file) {
-      return res.status(400).json({ msg: "A photo of the missing person is required." });
+      return res
+        .status(400)
+        .json({ msg: "A photo of the missing person is required." });
     }
 
     try {
-      const { user, person_name, gender, age, last_seen, description, relationToReporter, reporterContact, familyEmail, pinCode } = req.body;
+      const {
+        user,
+        person_name,
+        gender,
+        age,
+        last_seen,
+        description,
+        relationToReporter,
+        reporterContact,
+        familyEmail,
+        pinCode,
+      } = req.body;
 
       const newReport = new MissingReport({
-        user, person_name, gender, age, last_seen, description, relationToReporter, reporterContact, familyEmail, pinCode,
+        user,
+        person_name,
+        gender,
+        age,
+        last_seen,
+        description,
+        relationToReporter,
+        reporterContact,
+        familyEmail,
+        pinCode,
         photo_url: `uploads/reports/${req.file.filename}`,
         status: "Pending Verification",
       });
 
       await newReport.save();
-      console.log(`✅ [Report Created] Report for '${person_name}' saved successfully.`);
 
       if (familyEmail) {
         await transporter.sendMail({
@@ -98,12 +130,13 @@ router.post("/", (req, res) => {
           subject: "Missing Person Report Submitted",
           text: `Dear Family Member,\n\nYour report for ${person_name} has been submitted and is now under verification.`,
         });
-        console.log(`[Email Sent] Submission confirmation sent to ${familyEmail}.`);
       }
 
-      res.status(201).json({ msg: "Report submitted successfully", report: newReport });
+      res
+        .status(201)
+        .json({ msg: "Report submitted successfully", report: newReport });
     } catch (dbErr) {
-      console.error("🔴 [DB Error] Failed to save report:", dbErr);
+      console.error("DB Error saving report:", dbErr);
       res.status(500).json({ msg: "Server error while saving the report." });
     }
   });
@@ -124,7 +157,7 @@ router.get("/", async (req, res) => {
       .sort({ reported_at: -1 });
     res.json(reports);
   } catch (err) {
-    console.error("🔴 [DB Error] Failed to fetch reports:", err);
+    console.error("DB Error fetching reports:", err);
     res.status(500).send("Server Error");
   }
 });
@@ -134,30 +167,35 @@ router.get("/", async (req, res) => {
  * @desc    Get a list of photo filenames for all 'Verified' reports.
  */
 router.get("/verified-filenames", async (req, res) => {
-    try {
-      const verifiedReports = await MissingReport.find(
-        { status: "Verified" },
-        "photo_url"
-      ).lean();
-  
-      const filenames = verifiedReports.reduce((accumulator, report) => {
-        if (report && typeof report.photo_url === "string" && report.photo_url.trim()) {
-          try {
-            const filename = path.basename(report.photo_url);
-            accumulator.push(filename);
-          } catch (pathError) {
-            console.error(`🔴 [Path Error] Could not parse photo_url '${report.photo_url}' for report ID ${report._id}:`, pathError);
-          }
+  try {
+    const verifiedReports = await MissingReport.find(
+      { status: "Verified" },
+      "photo_url"
+    ).lean();
+
+    const filenames = verifiedReports.reduce((accumulator, report) => {
+      if (
+        report &&
+        typeof report.photo_url === "string" &&
+        report.photo_url.trim()
+      ) {
+        try {
+          const filename = path.basename(report.photo_url);
+          accumulator.push(filename);
+        } catch (pathError) {
+          console.error(`Path Error for report ID ${report._id}:`, pathError);
         }
-        return accumulator;
-      }, []);
-  
-      console.log(`[INFO] /verified-filenames: Found ${filenames.length} verified image filenames.`);
-      res.json(filenames);
-    } catch (err) {
-      console.error("🔴 [CRITICAL DB ERROR] /api/reports/verified-filenames:", err);
-      res.status(500).json({ msg: "Server error while fetching verified filenames." });
-    }
+      }
+      return accumulator;
+    }, []);
+
+    res.json(filenames);
+  } catch (err) {
+    console.error("DB Error /api/reports/verified-filenames:", err);
+    res
+      .status(500)
+      .json({ msg: "Server error while fetching verified filenames." });
+  }
 });
 
 /**
@@ -165,18 +203,39 @@ router.get("/verified-filenames", async (req, res) => {
  * @desc    Get a single report by its photo filename (for AI server)
  */
 router.get("/by-filename/:filename", async (req, res) => {
-    try {
-      const { filename } = req.params;
-      const report = await MissingReport.findOne({ photo_url: { $regex: `${filename}$` } }).populate("user", "name email");
-  
-      if (!report) {
-        return res.status(404).json({ msg: "Report not found for this image." });
-      }
-      res.json(report);
-    } catch (err) {
-      console.error(`🔴 [DB Error] Failed to fetch report by filename:`, err);
-      res.status(500).send("Server Error");
+  try {
+    let { filename } = req.params;
+
+    // Handle filename with or without .jpg extension
+    let searchFilename = filename;
+    if (filename.endsWith(".jpg")) {
+      searchFilename = filename.slice(0, -4); // Remove .jpg extension
     }
+
+    // Try exact match first (for database entries with .jpg)
+    let report = await MissingReport.findOne({
+      photo_url: { $regex: `${filename}$` },
+    }).populate("user", "name email");
+
+    // If no exact match, try without .jpg extension
+    if (!report && searchFilename !== filename) {
+      report = await MissingReport.findOne({
+        photo_url: { $regex: `${searchFilename}$` },
+      }).populate("user", "name email");
+    }
+
+    if (!report) {
+      return res.status(404).json({ msg: "Report not found for this image." });
+    }
+
+    res.json(report);
+  } catch (err) {
+    console.error(
+      `DB Error fetching report by filename "${req.params.filename}":`,
+      err
+    );
+    res.status(500).send("Server Error");
+  }
 });
 
 /**
@@ -184,16 +243,19 @@ router.get("/by-filename/:filename", async (req, res) => {
  * @desc    Get a single report by its ID
  */
 router.get("/:id", async (req, res) => {
-    try {
-      const report = await MissingReport.findById(req.params.id).populate("user", "name email");
-      if (!report) {
-        return res.status(404).json({ msg: "Report not found" });
-      }
-      res.json(report);
-    } catch (err) {
-      console.error(`🔴 [DB Error] Failed to fetch report ${req.params.id}:`, err);
-      res.status(500).send("Server Error");
+  try {
+    const report = await MissingReport.findById(req.params.id).populate(
+      "user",
+      "name email"
+    );
+    if (!report) {
+      return res.status(404).json({ msg: "Report not found" });
     }
+    res.json(report);
+  } catch (err) {
+    console.error(`DB Error fetching report ${req.params.id}:`, err);
+    res.status(500).send("Server Error");
+  }
 });
 
 // --- 4. STATUS UPDATE LOGIC ---
@@ -204,19 +266,26 @@ router.get("/:id", async (req, res) => {
  */
 async function updateReportStatus(req, res, newStatus) {
   try {
-    const report = await MissingReport.findById(req.params.id).populate("user", "name email");
+    const report = await MissingReport.findById(req.params.id).populate(
+      "user",
+      "name email"
+    );
     if (!report) {
       return res.status(404).json({ msg: "Report not found." });
     }
 
     if (report.status !== "Pending Verification" && newStatus !== "Found") {
-        return res.status(400).json({ msg: `Report has already been actioned. Current status: ${report.status}` });
+      return res.status(400).json({
+        msg: `Report has already been actioned. Current status: ${report.status}`,
+      });
     }
 
     report.status = newStatus;
     await report.save();
 
-    let subject = "", text = "", inAppMessage = "";
+    let subject = "",
+      text = "",
+      inAppMessage = "";
 
     switch (newStatus) {
       case "Verified":
@@ -236,30 +305,41 @@ async function updateReportStatus(req, res, newStatus) {
         break;
     }
 
-    // --- FIX: SEPARATE EMAIL AND IN-APP NOTIFICATION LOGIC ---
-    
-    // 1. Send an email if a familyEmail was provided (typically by an NGO)
+    // Send email if familyEmail was provided
     if (report.familyEmail) {
-      await transporter.sendMail({ from: process.env.EMAIL_USER, to: report.familyEmail, subject, text });
-      console.log(`[Email Sent] Status update ('${newStatus}') sent to ${report.familyEmail}.`);
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: report.familyEmail,
+        subject,
+        text,
+      });
     }
 
-    // 2. ALWAYS send an in-app notification to the original reporter's account (Family or NGO)
+    // Send in-app notification to the original reporter
     if (report.user) {
-      await new Notification({ recipient: report.user._id, message: inAppMessage }).save();
-      console.log(`[In-App Notification] Status update ('${newStatus}') created for user ${report.user.name} (${report.user._id}).`);
+      await new Notification({
+        recipient: report.user._id,
+        message: inAppMessage,
+      }).save();
     }
-    // --- END OF FIX ---
 
-    res.json({ msg: `Report status updated to '${newStatus}'. Notifications sent.` });
+    res.json({
+      msg: `Report status updated to '${newStatus}'. Notifications sent.`,
+    });
   } catch (err) {
-    console.error(`🔴 [Server Error] Failed to update status to '${newStatus}':`, err);
-    res.status(500).json({ msg: `Server error during status update.`, error: err.message });
+    console.error(`Server Error updating status to '${newStatus}':`, err);
+    res
+      .status(500)
+      .json({ msg: `Server error during status update.`, error: err.message });
   }
 }
 
-router.put('/verify/:id', (req, res) => updateReportStatus(req, res, 'Verified'));
-router.put('/reject/:id', (req, res) => updateReportStatus(req, res, 'Rejected'));
-router.put('/found/:id', (req, res) => updateReportStatus(req, res, 'Found'));
+router.put("/verify/:id", (req, res) =>
+  updateReportStatus(req, res, "Verified")
+);
+router.put("/reject/:id", (req, res) =>
+  updateReportStatus(req, res, "Rejected")
+);
+router.put("/found/:id", (req, res) => updateReportStatus(req, res, "Found"));
 
 module.exports = router;
