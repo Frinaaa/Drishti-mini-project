@@ -1,24 +1,28 @@
 """
-Drishti Database Manager Module
-===============================
+Drishti Database Manager Module - HIGH-EFFICIENCY VERSION
+=========================================================
 
-Optimized face recognition database management with improved error handling and performance.
+Builds the face recognition database index using ONLY images from verified reports.
+This prevents unverified/rejected faces from ever entering the search index,
+dramatically improving speed and accuracy.
 """
 
 import os
 import time
 import logging
 import asyncio
-from typing import Optional, Dict, List
+import pickle
+import requests
+from typing import Optional, Dict
 from deepface import DeepFace
-from .config import DB_PATH, MODEL_NAME
+from .config import DB_PATH, MODEL_NAME, BACKEND_API_URL
 from .image_processor import ImageProcessor
 
 logger = logging.getLogger(__name__)
 
 
 class DatabaseState:
-    """Manages the face recognition database state with performance tracking"""
+    """Manages the face recognition database state."""
     def __init__(self):
         self.last_build_time: Optional[float] = None
         self.image_count: int = 0
@@ -29,219 +33,160 @@ class DatabaseState:
 
 
 class DatabaseManager:
-    """Optimized database manager for face recognition operations"""
+    """Builds and manages a face database index from verified reports only."""
 
     def __init__(self):
         self.state = DatabaseState()
         self.image_processor = ImageProcessor()
         self._model_cache = None
-    
-    def get_pickle_file(self) -> Optional[str]:
-        """Get the DeepFace pickle file path if it exists"""
-        if not os.path.exists(DB_PATH):
-            return None
-        for fname in os.listdir(DB_PATH):
-            if fname.endswith('.pkl'):
-                return os.path.join(DB_PATH, fname)
-        return None
-    
+        self.verified_filenames_cache = []
+
+    def get_pickle_file_path(self) -> str:
+        """Returns the full path for the representations pickle file."""
+        return os.path.join(DB_PATH, f"representations_{MODEL_NAME.lower().replace('-', '_')}.pkl")
+
+    def get_verified_filenames(self) -> list:
+        """Fetches the list of filenames for verified reports from the backend."""
+        try:
+            url = f"{BACKEND_API_URL}/api/reports/verified-filenames"
+            response = requests.get(url, timeout=5)
+            response.raise_for_status()
+            filenames = response.json()
+            logger.info(f"Successfully fetched {len(filenames)} verified filenames from backend.")
+            self.verified_filenames_cache = filenames
+            return filenames
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Could not fetch verified filenames, using last known cache: {e}")
+            return self.verified_filenames_cache
+
     def should_rebuild_database(self) -> bool:
-        """Check if the database needs to be rebuilt"""
-        current_images = self.image_processor.get_image_files(DB_PATH)
-        current_count = len(current_images)
+        """
+        Checks if the database needs to be rebuilt by comparing the current list
+        of verified images with the number of images in the last build.
+        """
+        latest_verified_files = self.get_verified_filenames()
         
-        # Check if pickle file exists
-        pickle_file = self.get_pickle_file()
-        if not pickle_file:
-            logger.info(f"No pickle file found. Need to build database for {current_count} images.")
-            return current_count > 0
+        pickle_file = self.get_pickle_file_path()
+        if not os.path.exists(pickle_file):
+            logger.info("No database index (.pkl) file found. Rebuild is required.")
+            return True
         
-        # Check if image count changed
-        if current_count != self.state.image_count:
-            logger.info(f"Image count changed: {self.state.image_count} -> {current_count}. Rebuild needed.")
+        # If the number of verified files has changed, a rebuild is needed.
+        if len(latest_verified_files) != self.state.image_count:
+            logger.info(f"Change in verified images detected ({self.state.image_count} -> {len(latest_verified_files)}). Rebuild is required.")
             return True
         
         return False
-    
+
     def get_or_build_model(self):
-        """Get cached model or build it if not available with performance tracking"""
+        """Gets the cached DeepFace model or builds it if not available."""
         if self._model_cache is None:
-            start_time = time.time()
-            logger.info(f"Building {MODEL_NAME} model...")
+            logger.info(f"Building {MODEL_NAME} model for embedding generation...")
             try:
                 self._model_cache = DeepFace.build_model(MODEL_NAME)
-                build_time = time.time() - start_time
-                logger.info(f"Model built and cached in {build_time:.2f}s.")
+                logger.info("Model built and cached successfully.")
             except Exception as e:
-                logger.error(f"Failed to build model: {e}")
-                self.state.error_count += 1
+                logger.error(f"Failed to build DeepFace model: {e}")
                 raise
         return self._model_cache
-    
+
     async def update_database_async(self):
-        """Update the face database incrementally or perform full rebuild when needed"""
+        """Asynchronously triggers a full rebuild of the verified-only database."""
         if self.state.is_building:
-            logger.info("Database update already in progress, skipping...")
+            logger.info("Database update already in progress, skipping.")
             return
 
-        start_time = time.time()
         self.state.is_building = True
-
+        start_time = time.time()
+        
         try:
-            current_images = self.image_processor.get_image_files(DB_PATH)
-            current_count = len(current_images)
-
-            if current_count == 0:
-                logger.warning("No images found in database directory")
-                self.state.image_count = 0
-                return
-
-            # Determine update strategy
-            needs_full_rebuild = (
-                self.state.image_count == 0 or
-                not self.get_pickle_file() or
-                current_count > self.state.image_count * 1.5  # 50% increase threshold
-            )
-
-            if needs_full_rebuild:
-                logger.info(f"Performing full rebuild for {current_count} images...")
-                await self._full_rebuild()
-            else:
-                logger.info(f"Performing incremental update: {self.state.image_count} → {current_count} images")
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(None, self._incremental_update)
-
-            # Update state
-            self.state.image_count = current_count
+            logger.info("Starting verified-only database rebuild...")
+            loop = asyncio.get_running_loop()
+            # Run the synchronous, blocking build process in a separate thread
+            await loop.run_in_executor(None, self._build_verified_database_sync)
+            
             self.state.last_build_time = time.time()
-            self.state.build_duration = time.time() - start_time
-
-            logger.info(f"Database updated successfully in {self.state.build_duration:.2f}s! "
-                       f"Now contains {current_count} images.")
-
+            self.state.build_duration = self.state.last_build_time - start_time
+            logger.info(f"Database rebuild completed in {self.state.build_duration:.2f}s. Index now contains {self.state.image_count} verified images.")
+        
         except Exception as e:
-            logger.error(f"Database update failed: {e}")
+            logger.error(f"Database update failed catastrophically: {e}")
             self.state.error_count += 1
-            raise
         finally:
             self.state.is_building = False
-    
-    async def _full_rebuild(self):
-        """Perform a complete database rebuild"""
-        # Delete existing pickle files
-        if os.path.exists(DB_PATH):
-            for fname in os.listdir(DB_PATH):
-                if fname.endswith('.pkl'):
-                    pkl_path = os.path.join(DB_PATH, fname)
-                    try:
-                        os.remove(pkl_path)
-                        logger.info(f"Deleted old pickle file: {fname}")
-                    except OSError as e:
-                        logger.warning(f"Could not delete old pickle file {fname}: {e}")
 
-        # Run the rebuild in a thread to avoid blocking
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self._build_database_sync)
+    def _build_verified_database_sync(self):
+        """
+        Synchronous method that constructs the database index (.pkl file)
+        manually, using only images from verified reports.
+        """
+        verified_filenames = self.get_verified_filenames()
+        pickle_file_path = self.get_pickle_file_path()
 
-    def _validate_and_build_database(self, images: List[str], operation: str = "build") -> Dict[str, int]:
-        """Validate images and build/update database with comprehensive error handling"""
-        if not images:
-            return {"total": 0, "valid": 0, "skipped": 0}
+        # Delete the old index file before building a new one
+        if os.path.exists(pickle_file_path):
+            os.remove(pickle_file_path)
+            logger.info(f"Removed old database index file.")
 
-        valid_images = []
+        if not verified_filenames:
+            logger.warning("No verified images found. The database index will be empty.")
+            self.state.image_count = 0
+            return
+
+        representations = []
         skipped_count = 0
+        model = self.get_or_build_model() # Ensure model is ready
 
-        for image_name in images:
-            image_path = os.path.join(DB_PATH, image_name)
-            try:
-                # Test if the image has detectable faces
-                DeepFace.verify(
-                    img1_path=image_path,
-                    img2_path=image_path,
-                    model_name=MODEL_NAME,
-                    enforce_detection=False,
-                    silent=True
-                )
-                valid_images.append(image_name)
-                logger.debug(f"Face detected in {image_name}")
-            except Exception as e:
-                skipped_count += 1
-                logger.debug(f"Face not detected in {image_name} ({operation}): {e}")
-                continue
-
-        if valid_images:
-            try:
-                # Use first valid image to trigger database operation
-                test_image = os.path.join(DB_PATH, valid_images[0])
-                DeepFace.find(
-                    img_path=test_image,
-                    db_path=DB_PATH,
-                    model_name=MODEL_NAME,
-                    enforce_detection=False,
-                    silent=True
-                )
-                logger.info(f"Database {operation} completed: {len(valid_images)} valid, "
-                           f"{skipped_count} skipped out of {len(images)} total")
-            except Exception as e:
-                # Database operation may still succeed despite this exception
-                logger.info(f"Database {operation} finished with {len(valid_images)} valid images "
-                           f"(exception: {e})")
-
-        return {"total": len(images), "valid": len(valid_images), "skipped": skipped_count}
-
-    def _build_database_sync(self):
-        """Synchronous function to build the database using DeepFace with validation"""
-        images = self.image_processor.get_image_files(DB_PATH)
-        stats = self._validate_and_build_database(images, "build")
-
-        if stats["valid"] == 0:
-            logger.warning("No valid images with detectable faces found in the database directory")
-            logger.info("To test face recognition, add images with clear faces to the reports directory")
-
-    def _incremental_update(self):
-        """Incremental update - DeepFace automatically detects new images"""
-        images = self.image_processor.get_image_files(DB_PATH)
-        self._validate_and_build_database(images, "update")
-    
-    def get_database_stats(self) -> Dict[str, any]:
-        """Get comprehensive database statistics with performance metrics"""
-        try:
-            image_files = self.image_processor.get_image_files(DB_PATH)
-            pickle_files = []
-            if os.path.exists(DB_PATH):
-                pickle_files = [f for f in os.listdir(DB_PATH) if f.endswith('.pkl')]
-
-            # Calculate rebuild recommendation
-            needs_rebuild = self.should_rebuild_database()
-            rebuild_reason = "none"
-            if needs_rebuild:
-                if not pickle_files:
-                    rebuild_reason = "no_pickle"
-                elif len(image_files) != self.state.image_count:
-                    rebuild_reason = "count_mismatch"
+        logger.info(f"Generating representations for {len(verified_filenames)} verified images...")
+        
+        for filename in verified_filenames:
+            # Try both with and without .jpg extension
+            image_path = os.path.join(DB_PATH, filename)
+            if not os.path.exists(image_path):
+                image_path_with_ext = os.path.join(DB_PATH, filename + '.jpg')
+                if os.path.exists(image_path_with_ext):
+                    image_path = image_path_with_ext
                 else:
-                    rebuild_reason = "unknown"
+                    logger.warning(f"Skipping '{filename}' as it does not exist in the filesystem.")
+                    skipped_count += 1
+                    continue
+            
+            try:
+                # This is the core operation: create a vector embedding for the face
+                embedding = DeepFace.represent(
+                    img_path=image_path,
+                    model_name=MODEL_NAME,
+                    enforce_detection=True,
+                    detector_backend='retinaface'
+                )
+                # DeepFace returns a list of dicts, we need the first embedding
+                if embedding and len(embedding) > 0:
+                    representation = embedding[0]["embedding"]
+                    # The pickle file format is a list of [path, embedding]
+                    representations.append([image_path, representation])
+                else:
+                    raise ValueError("No embedding generated.")
 
-            return {
-                "total_images": len(image_files),
-                "valid_images": len(image_files),  # Could be enhanced to validate faces
-                "cached_image_count": self.state.image_count,
-                "database_built": len(pickle_files) > 0,
-                "is_building": self.state.is_building,
-                "last_build_time": self.state.last_build_time,
-                "build_duration": self.state.build_duration,
-                "model_cached": self._model_cache is not None,
-                "error_count": self.state.error_count,
-                "pickle_files": pickle_files,
-                "needs_rebuild": needs_rebuild,
-                "rebuild_reason": rebuild_reason,
-                "db_path": DB_PATH,
-                "model_name": MODEL_NAME
-            }
-        except Exception as e:
-            logger.error(f"Error getting database stats: {e}")
-            self.state.error_count += 1
-            return {
-                "error": str(e),
-                "error_count": self.state.error_count
-            }
+            except Exception as e:
+                logger.warning(f"Could not process '{filename}': Face not detected or error. Skipping. Reason: {e}")
+                skipped_count += 1
+        
+        if representations:
+            with open(pickle_file_path, "wb") as f:
+                pickle.dump(representations, f)
+            logger.info(f"Successfully created new database index with {len(representations)} entries.")
+        
+        self.state.image_count = len(representations)
+
+    def get_database_stats(self) -> Dict[str, any]:
+        """Gets comprehensive database statistics."""
+        # This function can be simplified as it's less critical now
+        return {
+            "is_building": self.state.is_building,
+            "last_build_time": self.state.last_build_time,
+            "build_duration": self.state.build_duration,
+            "indexed_verified_images": self.state.image_count,
+            "error_count": self.state.error_count,
+            "db_path": DB_PATH,
+            "model_name": MODEL_NAME
+        }
