@@ -163,6 +163,25 @@ router.get("/", async (req, res) => {
 });
 
 /**
+ * @route   GET /api/reports/recent
+ * @desc    Get the 5 most recent 'Pending Verification' reports for the dashboard
+ */
+router.get("/recent", async (req, res) => {
+  try {
+    const recentReports = await MissingReport.find({
+      status: "Pending Verification",
+    })
+      .sort({ reported_at: -1 })
+      .limit(5);
+
+    res.json(recentReports);
+  } catch (err) {
+    console.error("DB Error fetching recent reports:", err);
+    res.status(500).send("Server Error");
+  }
+});
+
+/**
  * @route   GET /api/reports/verified-filenames
  * @desc    Get a list of photo filenames for all 'Verified' reports.
  */

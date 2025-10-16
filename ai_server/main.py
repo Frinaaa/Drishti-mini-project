@@ -46,8 +46,6 @@ app = FastAPI(
 )
 
 # --- CORS Configuration ---
-# This is a critical step for development. It allows your React Native web app (and mobile app)
-# to connect to the server from a different origin (e.g., localhost:8081 -> localhost:8000).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -57,13 +55,10 @@ app.add_middleware(
 )
 
 # --- Mount Static Directory to Serve Images ---
-# This makes the 'uploads' folder publicly accessible at http://<server_ip>:8000/uploads/
-# It's how the frontend fetches the matched database images.
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 # --- Initialize Modular Components ---
-# Create single instances of our modules to be used throughout the application.
 image_processor = ImageProcessor()
 database_manager = DatabaseManager()
 face_recognizer = FaceRecognizer(database_manager)
@@ -84,7 +79,6 @@ async def startup_event():
     """Runs once when the server starts."""
     logger.info("🚀 Drishti Server is starting up...")
     
-    # Ensure all necessary directories exist
     for path in [DB_PATH, TEMP_UPLOAD_PATH, UNIDENTIFIED_SIGHTINGS_PATH, CAPTURE_DIR]:
         os.makedirs(path, exist_ok=True)
 
@@ -92,7 +86,6 @@ async def startup_event():
     database_manager.state.image_count = len(current_images)
     logger.info(f"Database initialized with {database_manager.state.image_count} images.")
     
-    # Pre-build the AI model to avoid a long delay on the first request
     logger.info(f"Pre-building {MODEL_NAME} model...")
     try:
         loop = asyncio.get_running_loop()
@@ -100,14 +93,12 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Could not pre-build model: {e}")
 
-    # Build or verify the face database index (.pkl file)
     if database_manager.should_rebuild_database():
         logger.info("Database build/update needed...")
         await database_manager.update_database_async()
     else:
         logger.info("Database is up to date.")
 
-    # Start watching the reports folder for new images
     current_loop = asyncio.get_running_loop()
     if file_monitor.start_monitoring(current_loop):
         logger.info("File system monitoring started")
@@ -121,12 +112,11 @@ async def shutdown_event():
 # --- HTTP API ENDPOINTS ---
 @app.get("/")
 async def root():
-    """A simple health check endpoint."""
     return { "status": "online", "service": "Drishti Face Recognition API", "version": "5.0.0" }
 
 @app.post("/find_match_react_native")
 async def find_match_react_native(file_data: str = Form(...)):
-    """Legacy endpoint for single, file-based image uploads."""
+    """HIGH-PERFORMANCE endpoint for single, file-based image uploads."""
     temp_file_path = None
     try:
         if 'base64,' in file_data:
@@ -140,19 +130,16 @@ async def find_match_react_native(file_data: str = Form(...)):
         with open(temp_file_path, "wb") as f:
             f.write(image_data)
 
+        # This call now executes the new, ultra-fast code in face_recognition.py
         result = await face_recognizer.process_face_match(temp_file_path, filename)
 
         if not result.get("match_found"):
             return await handle_no_match(temp_file_path, result.get("message", "No match found"))
         
-        # This part ensures the full URL path is included in the response for this endpoint too
-        if result.get("matched_image"):
-            identity_path = os.path.join(DB_PATH, result["matched_image"])
-            if os.path.exists(identity_path):
-                relative_path = os.path.relpath(identity_path, UPLOADS_DIR).replace("\\", "/")
-                result["file_path"] = f"uploads/{relative_path}"
-        
+        # The result from the new find_match function already contains the 'file_path'
+        # so no extra processing is needed here.
         return result
+
     except Exception as e:
         logger.error(f"Error processing upload: {e}")
         raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")
@@ -187,10 +174,6 @@ async def database_stats():
 # --- LIVE VIDEO WEBSOCKET ENDPOINT ---
 @app.websocket("/ws/live_stream")
 async def websocket_live_stream(websocket: WebSocket):
-    """
-    The primary endpoint for the live scanning feature.
-    It accepts a WebSocket connection and passes it to a dedicated handler.
-    """
     handler = LiveStreamHandler(face_recognizer, image_processor)
     await handler.handle_websocket(websocket)
 
@@ -201,5 +184,4 @@ if __name__ == "__main__":
     print("Features: Modular Architecture + Live WebSocket Streaming")
     print("Server will be available at: http://localhost:8000")
     print("===========================================")
-    # host="0.0.0.0" is essential for making the server accessible on your local network
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)

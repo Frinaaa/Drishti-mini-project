@@ -25,6 +25,7 @@ class LiveStreamHandler:
     def _process_frame_sync(self, frame: np.ndarray) -> dict:
         self.processing = True
         try:
+            # This call is now simpler and more direct, using the refactored module
             result = self.face_recognizer.find_match_in_memory(frame)
             if result and result.get('match_found'):
                 filename = result.get('filename')
