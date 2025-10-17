@@ -172,7 +172,7 @@ router.get("/recent", async (req, res) => {
       status: "Pending Verification",
     })
       .sort({ reported_at: -1 })
-      .limit(5);
+      .limit(2);
 
     res.json(recentReports);
   } catch (err) {
@@ -180,7 +180,33 @@ router.get("/recent", async (req, res) => {
     res.status(500).send("Server Error");
   }
 });
+// In backend/routes/reports.js
 
+// ... after router.get("/recent", ...)
+
+/**
+ * @route   GET /api/reports/user/:userId
+ * @desc    Get all 'Verified' (active) reports for a specific user
+ */
+// This is the NEW, CORRECT code
+router.get("/user/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    // Find ALL reports for this user, regardless of status
+    const allUserReports = await MissingReport.find({
+      user: userId, 
+    }).sort({ reported_at: -1 }); // Show the most recent reports first
+
+    res.status(200).json(allUserReports);
+  } catch (err) {
+    console.error(`Error fetching reports for user ${req.params.userId}:`, err);
+    res.status(500).json({ msg: "Server error while fetching user reports." });
+  }
+});
+
+
+
+//... rest of your file
 /**
  * @route   GET /api/reports/verified-filenames
  * @desc    Get a list of photo filenames for all 'Verified' reports.
