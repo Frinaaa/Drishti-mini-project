@@ -1,3 +1,5 @@
+# ai_server/main.py
+
 """
 Drishti Face Recognition Service - Final Version
 ================================================
@@ -116,7 +118,7 @@ async def root():
 
 @app.post("/find_match_react_native")
 async def find_match_react_native(file_data: str = Form(...)):
-    """HIGH-PERFORMANCE endpoint for single, file-based image uploads."""
+    """HIGH-PERFORMANCE endpoint for single, file-based uploads."""
     temp_file_path = None
     try:
         if 'base64,' in file_data:
@@ -178,7 +180,7 @@ async def websocket_live_stream(websocket: WebSocket):
     await handler.handle_websocket(websocket)
 
 # --- Server Entry Point ---
-if __name__ == "__main__":
+if __name__ == "_main_":
     print("===========================================")
     print("🚀 Starting Drishti Face Recognition Service v5.0.0")
     print("Features: Modular Architecture + Live WebSocket Streaming")

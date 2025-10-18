@@ -55,7 +55,7 @@ interface FullMatchDetails {
 type ScreenState = "camera" | "preview" | "scanning" | "matchFound";
 
 // --- Constants ---
-const AI_TIMEOUT = 60000; // 60 seconds
+const AI_TIMEOUT = 80000; // 60 seconds
 const BACKEND_TIMEOUT = 10000; // 10 seconds
 const MAX_RETRIES = 2;
 const IMAGE_QUALITY = 0.3;
