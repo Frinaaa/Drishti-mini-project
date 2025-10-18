@@ -55,8 +55,10 @@ const NotificationSchema = new Schema({
     is_read: { type: Boolean, default: false },
     created_at: { type: Date, default: Date.now }
 });
+// --- THIS IS THE FULLY CORRECTED SCHEMA ---
 const MissingReportSchema = new Schema({
-    user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    associatedFamily: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     person_name: { type: String, required: true },
     gender: { type: String, enum: ['Male', 'Female', 'Other'], required: true },
     age: { type: Number, required: true },
@@ -65,9 +67,25 @@ const MissingReportSchema = new Schema({
     relationToReporter: { type: String },
     reporterContact: { type: String },
     familyEmail: { type: String },
-    photo_url: { type: String },
-    status: { type: String, default: 'Pending', required: true },
-    pinCode: { type: String,required: true,},
+    photo_url: { type: String, required: true },
+    status: { 
+        type: String, 
+        enum: ['Pending Verification', 'Verified', 'Rejected', 'Found'], 
+        default: 'Pending Verification', 
+        required: true,
+        index: true,
+    },
+    pinCode: { 
+        type: String,
+        required: true,
+        index: true,
+    },
+    source: {
+        type: String,
+        enum: ['Family/NGO Form', 'Police Face Search', 'NGO Live Scan'],
+        default: 'Family/NGO Form',
+        required: true,
+    },
     reported_at: { type: Date, default: Date.now }
 });
 const UploadedPhotoSchema = new Schema({
