@@ -43,6 +43,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/requests', require('./routes/requests'));
+app.use('/api/ngo', require('./routes/ngo'));
 
 // This tells your server to use the notifications.js file for any request to /api/notifications
 app.use('/api/notifications', require('./routes/notifications'));

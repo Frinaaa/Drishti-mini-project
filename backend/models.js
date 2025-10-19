@@ -55,10 +55,9 @@ const NotificationSchema = new Schema({
     is_read: { type: Boolean, default: false },
     created_at: { type: Date, default: Date.now }
 });
-// --- THIS IS THE FULLY CORRECTED SCHEMA ---
+// And replace it with this complete, updated version:
 const MissingReportSchema = new Schema({
-    user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    associatedFamily: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     person_name: { type: String, required: true },
     gender: { type: String, enum: ['Male', 'Female', 'Other'], required: true },
     age: { type: Number, required: true },
@@ -67,27 +66,55 @@ const MissingReportSchema = new Schema({
     relationToReporter: { type: String },
     reporterContact: { type: String },
     familyEmail: { type: String },
-    photo_url: { type: String, required: true },
-    status: { 
-        type: String, 
-        enum: ['Pending Verification', 'Verified', 'Rejected', 'Found'], 
-        default: 'Pending Verification', 
-        required: true,
-        index: true,
+    photo_url: { type: String },
+    
+    // RECOMMENDED IMPROVEMENT: Use an enum for the status
+    // in backend/models.js -> MissingReportSchema
+
+status: { 
+    type: String, 
+    // Add "Pending Verification" to the list of allowed values
+    enum: ['Pending Verification', 'Pending', 'Verified', 'Rejected', 'Found'],
+    default: 'Pending Verification', // It's good practice to match the default
+    required: true 
+},
+    
+    pinCode: { type: String, required: true,},
+    reported_at: { type: Date, default: Date.now },
+
+    // =========================================================
+    // ===          ADD THESE TWO NEW FIELDS                 ===
+    // =========================================================
+    
+    // This timestamp is for the "Photos Reviewed Today" and "Reports Sent to Police" counters.
+    // It will be set when status becomes 'Verified' or 'Rejected'.
+    reviewedAt: {
+        type: Date
     },
-    pinCode: { 
-        type: String,
-        required: true,
-        index: true,
+
+    // This timestamp is for the "AI Matches Checked" counter.
+    // It will be set when status becomes 'Found'.
+    foundAt: {
+        type: Date
     },
-    source: {
-        type: String,
-        enum: ['Family/NGO Form', 'Police Face Search', 'NGO Live Scan'],
-        default: 'Family/NGO Form',
-        required: true,
+    // =========================================================
+    // ===          ADD THESE TWO NEW FIELDS                 ===
+    // =========================================================
+    
+    // This will store the ID of the NGO who verified/rejected the report.
+    reviewedByNgo: {
+        type: Schema.Types.ObjectId,
+        ref: 'User' // This links to the User model
     },
-    reported_at: { type: Date, default: Date.now }
+
+    // This will store the ID of the NGO who marked the report as 'Found'.
+    foundByNgo: {
+        type: Schema.Types.ObjectId,
+        ref: 'User' // This links to the User model
+    }
 });
+
+
 const UploadedPhotoSchema = new Schema({
     uploader: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     location: { type: String, required: true },

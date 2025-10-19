@@ -1,13 +1,24 @@
 const express = require('express');
 const router = express.Router();
-const { User, Role, Notification } = require('../models');
+const { User, Role, Notification, MissingReport } = require('../models');
+const authMiddleware = require('../middleware/auth');
+const mongoose = require('mongoose');
+
+// Utility function for consistent date boundary calculations
+function getTodayDateBoundaries() {
+    const today = new Date();
+    // Use UTC to avoid timezone issues and ensure consistent date boundaries
+    const startOfDay = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 0, 0, 0, 0));
+    const endOfDay = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 23, 59, 59, 999));
+    return { startOfDay, endOfDay };
+}
 
 /*
  * ROUTE: POST /api/ngo/register (UPDATED: Now lives here)
  * PURPOSE: Allows a new NGO to register.
  */
 router.post('/register', async (req, res) => {
-    const { ngoName, email, password, ngoId, address, contactNumber, location } = req.body;
+    const { ngoName, email, password } = req.body;
     if (!ngoName || !email || !password) {
         return res.status(400).json({ msg: 'Please enter at least the NGO Name, Email, and Password.' });
     }
@@ -24,9 +35,6 @@ router.post('/register', async (req, res) => {
             password,
             role: ngoRole._id,
             status: 'Pending', // New NGOs start as 'Pending'
-            // NOTE: Fields like ngoId, address, contactNumber, location
-            // are not part of UserSchema. If you want to store them,
-            // you must add them to UserSchema in models.js.
         });
         await user.save();
         res.status(201).json({ msg: `${ngoName} has been registered and is pending verification.` });
@@ -90,6 +98,72 @@ router.put('/update-status/:id', async (req, res) => {
     console.error("Error in /update-status:", err.message);
     res.status(500).send('Server Error');
   }
+});
+
+// --- PERSONALIZED NGO DASHBOARD STATISTICS ROUTE ---
+/**
+ * @route   GET /api/ngo/dashboard-stats
+ * @desc    Get daily statistics for THE LOGGED-IN NGO (simplified for dashboard use)
+ * @access  PRIVATE
+ */
+router.get('/dashboard-stats', authMiddleware, async (req, res) => {
+    try {
+        const loggedInNgoId = req.user.id;
+        const ngoObjectId = new mongoose.Types.ObjectId(loggedInNgoId.toString());
+
+        // Verify the user is actually an NGO
+        const user = await User.findById(loggedInNgoId).populate('role');
+        if (!user) {
+            return res.status(404).json({ msg: 'User not found' });
+        }
+
+        // Check if user has NGO role
+        if (user.role.role_name !== 'NGO') {
+            return res.status(403).json({ msg: 'Access denied. NGO role required.' });
+        }
+
+        // Use utility function for consistent date boundaries
+        const { startOfDay, endOfDay } = getTodayDateBoundaries();
+
+        // Get only the stats needed by the dashboard
+        const [
+            photosReviewedToday,
+            aiMatchesChecked,
+            reportsSent
+        ] = await Promise.all([
+            // Reports reviewed today by this NGO
+            MissingReport.countDocuments({
+                reviewedByNgo: ngoObjectId,
+                reviewedAt: { $gte: startOfDay, $lt: endOfDay }
+            }),
+
+            // AI matches checked today (reports marked as found by this NGO)
+            MissingReport.countDocuments({
+                foundByNgo: ngoObjectId,
+                foundAt: { $gte: startOfDay, $lt: endOfDay }
+            }),
+
+            // Reports verified today by this NGO
+            MissingReport.countDocuments({
+                reviewedByNgo: ngoObjectId,
+                status: "Verified",
+                reviewedAt: { $gte: startOfDay, $lt: endOfDay }
+            })
+        ]);
+
+        // Return only the stats needed by the dashboard
+        const stats = {
+            photosReviewedToday,
+            aiMatchesChecked,
+            reportsSent
+        };
+
+        res.json(stats);
+
+    } catch (error) {
+        console.error('Error in NGO dashboard stats:', error.message);
+        res.status(500).json({ msg: 'Server error while calculating stats.' });
+    }
 });
 
 module.exports = router;
