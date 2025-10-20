@@ -34,10 +34,24 @@ if (!fs.existsSync(reportUploadsDir)) {
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, reportUploadsDir),
   filename: (req, file, cb) => {
+    // Define a map of mimetypes to file extensions
+    const MIME_TYPE_MAP = {
+      'image/png': '.png',
+      'image/jpeg': '.jpg',
+      'image/jpg': '.jpg',
+    };
+
+    // Get the extension from the mimetype, defaulting to '.jpg' if not found
+    const extension = MIME_TYPE_MAP[file.mimetype] || '.jpg';
+    
+    // Create the unique filename
     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
+    
+    // Combine the unique name with the reliable extension
+    cb(null, `${uniqueSuffix}${extension}`);
   },
 });
+
 
 const upload = multer({
   storage: storage,
@@ -243,6 +257,44 @@ router.get("/verified-filenames", async (req, res) => {
       .json({ msg: "Server error while fetching verified filenames." });
   }
 });
+router.get("/statistics", authMiddleware, async (req, res) => {
+  try {
+    const stats = await MissingReport.aggregate([
+      {
+        $facet: {
+          // ... (totalReports and foundCount buckets are unchanged)
+          totalReports: [{ $count: "count" }],
+          foundCount: [
+            { $match: { status: "Found" } },
+            { $count: "count" }
+          ],
+          
+          activeCases: [
+            { $match: { status: "Verified" } },
+            {
+              $group: {
+                _id: null,
+                missingCount: { $sum: 1 },
+                children: {
+                  $sum: { $cond: [{ $lt: ["$age", 18] }, 1, 0] }
+                },
+                male: {
+                  $sum: { $cond: [{ $and: [{ $gte: ["$age", 18] }, { $eq: ["$gender", "Male"] }] }, 1, 0] }
+                },
+                female: {
+                  $sum: { $cond: [{ $and: [{ $gte: ["$age", 18] }, { $eq: ["$gender", "Female"] }] }, 1, 0] }
+                },
+                // --- ADD THIS BLOCK ---
+                other: {
+                  $sum: { $cond: [{ $and: [{ $gte: ["$age", 18] }, { $eq: ["$gender", "Other"] }] }, 1, 0] }
+                }
+                // --- END OF ADDITION ---
+              }
+            }
+          ]
+        }
+      }
+    ]);
 
 /**
  * @route   GET /api/reports/by-filename/:filename
@@ -304,6 +356,29 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+
+    const activeCaseData = stats[0].activeCases[0] || {};
+    
+    const formattedStats = {
+      totalReports: stats[0].totalReports[0]?.count || 0,
+      foundCount: stats[0].foundCount[0]?.count || 0,
+      missingCount: activeCaseData.missingCount || 0,
+      categoryStats: {
+        total: activeCaseData.missingCount || 0,
+        children: activeCaseData.children || 0,
+        male: activeCaseData.male || 0,
+        female: activeCaseData.female || 0,
+        other: activeCaseData.other || 0, // <-- ADD THIS LINE to the final object
+      }
+    };
+
+    res.json(formattedStats);
+
+  } catch (err) {
+    console.error("Error fetching report statistics:", err);
+    res.status(500).json({ msg: "Server error while fetching statistics." });
+  }
+});
 
 // in backend/routes/reports.js
 
