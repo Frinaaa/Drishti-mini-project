@@ -1,10 +1,11 @@
+# ai_server/modules/database_manager.py
 """
 Drishti Database Manager Module - HIGH-EFFICIENCY VERSION
 =========================================================
 
 Builds the face recognition database index using ONLY images from verified reports.
 This prevents unverified/rejected faces from ever entering the search index,
-dramatically improving speed and accuracy.
+dramatically improving speed and accuracy. Also generates a metadata log for observability.
 """
 
 import os
@@ -13,6 +14,8 @@ import logging
 import asyncio
 import pickle
 import requests
+import json
+from datetime import datetime
 from typing import Optional, Dict
 from deepface import DeepFace
 from .config import DB_PATH, MODEL_NAME, BACKEND_API_URL
@@ -123,7 +126,6 @@ class DatabaseManager:
         verified_filenames = self.get_verified_filenames()
         pickle_file_path = self.get_pickle_file_path()
 
-        # Delete the old index file before building a new one
         if os.path.exists(pickle_file_path):
             os.remove(pickle_file_path)
             logger.info(f"Removed old database index file.")
@@ -131,39 +133,46 @@ class DatabaseManager:
         if not verified_filenames:
             logger.warning("No verified images found. The database index will be empty.")
             self.state.image_count = 0
+            self._write_metadata_log(verified_filenames, [], 0) # Write empty log
             return
 
         representations = []
         skipped_count = 0
-        model = self.get_or_build_model() # Ensure model is ready
+        model = self.get_or_build_model()
 
         logger.info(f"Generating representations for {len(verified_filenames)} verified images...")
         
+        # Use a set for fast O(1) lookups
+        verified_set = set(verified_filenames)
+        processed_filenames = []
+
         for filename in verified_filenames:
-            # Try both with and without .jpg extension
             image_path = os.path.join(DB_PATH, filename)
+            
+            # The backend might send filenames with or without extensions, so we check both.
             if not os.path.exists(image_path):
-                image_path_with_ext = os.path.join(DB_PATH, filename + '.jpg')
-                if os.path.exists(image_path_with_ext):
-                    image_path = image_path_with_ext
-                else:
+                # Check for common extensions if the base filename isn't found
+                found = False
+                for ext in ['.jpg', '.jpeg', '.png']:
+                    path_with_ext = os.path.join(DB_PATH, os.path.splitext(filename)[0] + ext)
+                    if os.path.exists(path_with_ext):
+                        image_path = path_with_ext
+                        found = True
+                        break
+                if not found:
                     logger.warning(f"Skipping '{filename}' as it does not exist in the filesystem.")
                     skipped_count += 1
                     continue
             
             try:
-                # This is the core operation: create a vector embedding for the face
                 embedding = DeepFace.represent(
-                    img_path=image_path,
-                    model_name=MODEL_NAME,
-                    enforce_detection=True,
-                    detector_backend='retinaface'
+                    img_path=image_path, model_name=MODEL_NAME,
+                    enforce_detection=True, detector_backend='retinaface'
                 )
-                # DeepFace returns a list of dicts, we need the first embedding
                 if embedding and len(embedding) > 0:
                     representation = embedding[0]["embedding"]
-                    # The pickle file format is a list of [path, embedding]
                     representations.append([image_path, representation])
+                    processed_filenames.append(filename) # Log the successfully processed file
                 else:
                     raise ValueError("No embedding generated.")
 
@@ -178,9 +187,70 @@ class DatabaseManager:
         
         self.state.image_count = len(representations)
 
+        # =====================================================================
+        # === NEW LOGGING FUNCTION CALL                                     ===
+        # =====================================================================
+        self._write_metadata_log(verified_set, processed_filenames, skipped_count)
+        # =====================================================================
+
+    # =========================================================================
+    # === NEW METHOD FOR GENERATING THE report_metadata.json LOG            ===
+    # =========================================================================
+    def _write_metadata_log(self, verified_filenames_set, processed_filenames, skipped_count):
+        """
+        Generates a human-readable JSON log of how each report image was handled
+        during the last database build.
+        """
+        log_file_path = os.path.join(DB_PATH, "report_metadata.json")
+        all_image_files = self.image_processor.get_image_files(DB_PATH)
+        
+        log_data = {
+            "last_build_timestamp": datetime.now().isoformat(),
+            "total_images_in_directory": len(all_image_files),
+            "verified_reports_from_backend": len(verified_filenames_set),
+            "successfully_indexed_for_search": len(processed_filenames),
+            "skipped_during_processing": skipped_count,
+            "image_handling_details": {}
+        }
+
+        processed_set = set(processed_filenames)
+
+        for image_file in all_image_files:
+            # Check if the file (or its name without extension) is in the verified set
+            base_name, _ = os.path.splitext(image_file)
+            is_verified = image_file in verified_filenames_set or base_name in verified_filenames_set
+
+            status = ""
+            reason = ""
+
+            if is_verified:
+                if image_file in processed_set or base_name in processed_set:
+                    status = "INDEXED"
+                    reason = "Image is from a verified report and a face was successfully processed."
+                else:
+                    status = "SKIPPED"
+                    reason = "Image is from a verified report, but no face was detected or an error occurred during processing."
+            else:
+                status = "IGNORED"
+                reason = "Image is not from a 'Verified' report and was correctly excluded from the search index."
+
+            log_data["image_handling_details"][image_file] = {
+                "status": status,
+                "reason": reason
+            }
+
+        try:
+            with open(log_file_path, "w") as f:
+                json.dump(log_data, f, indent=4)
+            logger.info(f"Successfully wrote metadata log to {log_file_path}")
+        except Exception as e:
+            logger.error(f"Could not write metadata log: {e}")
+    # =========================================================================
+    # === END OF NEW METHOD                                                 ===
+    # =========================================================================
+
     def get_database_stats(self) -> Dict[str, any]:
         """Gets comprehensive database statistics."""
-        # This function can be simplified as it's less critical now
         return {
             "is_building": self.state.is_building,
             "last_build_time": self.state.last_build_time,
