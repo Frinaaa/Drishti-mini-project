@@ -108,62 +108,60 @@ router.put('/update-status/:id', async (req, res) => {
  */
 router.get('/dashboard-stats', authMiddleware, async (req, res) => {
     try {
-        const loggedInNgoId = req.user.id;
-        const ngoObjectId = new mongoose.Types.ObjectId(loggedInNgoId.toString());
+        const loggedInNgoId = new mongoose.Types.ObjectId(req.user.id);
 
-        // Verify the user is actually an NGO
-        const user = await User.findById(loggedInNgoId).populate('role');
-        if (!user) {
-            return res.status(404).json({ msg: 'User not found' });
-        }
-
-        // Check if user has NGO role
-        if (user.role.role_name !== 'NGO') {
-            return res.status(403).json({ msg: 'Access denied. NGO role required.' });
-        }
-
-        // Use utility function for consistent date boundaries
+        // Use the getTodayDateBoundaries function for consistent date boundaries
         const { startOfDay, endOfDay } = getTodayDateBoundaries();
 
-        // Get only the stats needed by the dashboard
+        // --- DEFINE THE DATABASE QUERIES ---
+
+        // 1. Photos Reviewed Today (Counts 'Verified' OR 'Rejected' actions today)
+        const photosReviewedTodayPromise = MissingReport.countDocuments({
+            reviewedByNgo: loggedInNgoId,
+            reviewedAt: { $gte: startOfDay, $lt: endOfDay },
+
+        });
+
+        // 2. AI Matches Checked (Counts reports this NGO marked as 'Found')
+        const aiMatchesCheckedPromise = MissingReport.countDocuments({
+            foundByNgo: loggedInNgoId,
+            status: 'Found',
+        });
+
+        // =========================================================================
+        // ===          THIS IS THE MODIFIED LOGIC FOR YOUR COUNTER              ===
+        // =========================================================================
+        // 3. Total Verified Reports (The new "Reports Sent to Police" metric)
+        // This is a TOTAL count of all reports that are verified (not NGO-specific).
+        // It is NOT limited by today's date.
+        const totalVerifiedReportsPromise = MissingReport.countDocuments({
+            status: 'Verified', // Count all reports with "Verified" status
+        });
+        // =========================================================================
+
+        // Run all queries in parallel for maximum performance
         const [
             photosReviewedToday,
             aiMatchesChecked,
-            reportsSent
+            totalVerifiedReports, // Use the new variable name
         ] = await Promise.all([
-            // Reports reviewed today by this NGO
-            MissingReport.countDocuments({
-                reviewedByNgo: ngoObjectId,
-                reviewedAt: { $gte: startOfDay, $lt: endOfDay }
-            }),
-
-            // AI matches checked today (reports marked as found by this NGO)
-            MissingReport.countDocuments({
-                foundByNgo: ngoObjectId,
-                foundAt: { $gte: startOfDay, $lt: endOfDay }
-            }),
-
-            // Reports verified today by this NGO
-            MissingReport.countDocuments({
-                reviewedByNgo: ngoObjectId,
-                status: "Verified",
-                reviewedAt: { $gte: startOfDay, $lt: endOfDay }
-            })
+            photosReviewedTodayPromise,
+            aiMatchesCheckedPromise,
+            totalVerifiedReportsPromise,
         ]);
-
-        // Return only the stats needed by the dashboard
-        const stats = {
+        
+        // Send the updated stats object to the frontend
+        res.json({
             photosReviewedToday,
             aiMatchesChecked,
-            reportsSent
-        };
-
-        res.json(stats);
+            reportsSent: totalVerifiedReports, // Changed from reportsSentToPolice to reportsSent to match frontend
+        });
 
     } catch (error) {
         console.error('Error in NGO dashboard stats:', error.message);
         res.status(500).json({ msg: 'Server error while calculating stats.' });
     }
 });
+
 
 module.exports = router;

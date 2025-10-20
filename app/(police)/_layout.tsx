@@ -52,7 +52,14 @@ export default function PoliceTabLayout() {
             tabBarIcon: ({ color }) => <TabBarIcon name="people-outline" color={color} />,
           }}
         />
-        
+          {/* ADD THIS NEW HIDDEN SCREEN */}
+        <Tabs.Screen 
+            name="incoming-reports" 
+            options={{ 
+                href: null, // This hides it from the tab bar
+                title: 'Incoming Reports' // This title will show in the header
+            }} 
+        />
         {/* These screens remain hidden from the tab bar. */}
         {/* The header logic above will automatically give them a back button. */}
         <Tabs.Screen name="reports" options={{ href: null, title: 'Reports' }} />

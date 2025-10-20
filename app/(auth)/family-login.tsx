@@ -10,20 +10,76 @@ export default function FamilyLoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  const validatePassword = (pass: string): boolean => {
+    if (!pass) {
+      setPasswordError('Password is required');
+      return false;
+    }
+    if (pass.length < 6) {
+      setPasswordError('Password must be at least 6 characters long');
+      return false;
+    }
+    setPasswordError('');
+    return true;
+  };
+
+  const validateEmail = (email: string): boolean => {
+    // More comprehensive email validation
+    const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
+    
+    if (!email) {
+      setEmailError('Email is required');
+      return false;
+    }
+    
+    if (!emailRegex.test(email)) {
+      setEmailError('Please enter a valid email address');
+      return false;
+    }
+    
+    if (email.length > 254) {
+      setEmailError('Email is too long');
+      return false;
+    }
+    
+    const [localPart] = email.split('@');
+    if (localPart.length > 64) {
+      setEmailError('Email username is too long');
+      return false;
+    }
+    
+    setEmailError('');
+    return true;
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
       return Alert.alert('Error', 'Please enter both email and password.');
     }
 
-    // --- CLIENT-SIDE VALIDATION START ---
-    const emailRegex = /\S+@\S+\.\S+/;
-    if (!emailRegex.test(email)) {
-      return Alert.alert('Invalid Email', 'Please enter a valid email address.');
+    // Validate email
+    if (!validateEmail(email)) {
+      return Alert.alert('Invalid Email', emailError);
     }
 
-    if (password.length < 6) {
-      return Alert.alert('Invalid Password', 'Password must be at least 6 characters long.');
+    const validatePassword = (pass: string): boolean => {
+      if (!pass) {
+        setPasswordError('Password is required');
+        return false;
+      }
+      if (pass.length < 6) {
+        setPasswordError('Password must be at least 6 characters long');
+        return false;
+      }
+      setPasswordError('');
+      return true;
+    };
+
+    if (!validatePassword(password)) {
+      return Alert.alert('Invalid Password', passwordError);
     }
     // --- CLIENT-SIDE VALIDATION END ---
 
@@ -55,8 +111,23 @@ export default function FamilyLoginScreen() {
           Alert.alert('Access Denied', 'This login is for family members only. Please use the correct login portal.');
         }
       } else {
-        // Handle login errors like "Invalid credentials"
-        Alert.alert('Login Failed', data.msg || 'An unknown error occurred.');
+        // Check if the error is about an unregistered email
+        if (data.msg?.toLowerCase().includes('not registered') || data.msg?.toLowerCase().includes('not found')) {
+          Alert.alert(
+            'Unregistered Account',
+            'This email is not registered. Would you like to create a new family account?',
+            [
+              { text: 'Cancel' },
+              { 
+                text: 'Sign Up', 
+                onPress: () => router.push('./family-signup')
+              }
+            ]
+          );
+        } else {
+          // Handle other login errors
+          Alert.alert('Login Failed', data.msg || 'An unknown error occurred.');
+        }
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -69,23 +140,38 @@ export default function FamilyLoginScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}> Family Login</Text>
-      <TextInput 
-        style={styles.input} 
-        placeholder="Email" 
-        placeholderTextColor="#b94e4e" 
-        value={email} 
-        onChangeText={setEmail} 
-        keyboardType="email-address" 
-        autoCapitalize="none" 
-      />
-      <TextInput 
-        style={styles.input} 
-        placeholder="Password" 
-        placeholderTextColor="#b94e4e" 
-        value={password} 
-        onChangeText={setPassword} 
-        secureTextEntry 
-      />
+      <View>
+        <TextInput 
+          style={[styles.input, emailError ? styles.inputError : null]} 
+          placeholder="Email" 
+          placeholderTextColor="#b94e4e" 
+          value={email} 
+          onChangeText={(text) => {
+            setEmail(text);
+            validateEmail(text);
+          }}
+          keyboardType="email-address" 
+          autoCapitalize="none"
+          autoCorrect={false}
+          textContentType="emailAddress"
+        />
+        {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
+      </View>
+      <View>
+        <TextInput 
+          style={[styles.input, passwordError ? styles.inputError : null]} 
+          placeholder="Password" 
+          placeholderTextColor="#b94e4e" 
+          value={password} 
+          onChangeText={(text) => {
+            setPassword(text);
+            validatePassword(text);
+          }}
+          secureTextEntry
+          textContentType="password"
+        />
+        {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
+      </View>
       
       {loading ? (
         <ActivityIndicator size="large" color="#850a0a" style={{ marginTop: 20 }} />
@@ -106,6 +192,8 @@ export default function FamilyLoginScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fcf7f7', padding: 20, justifyContent: 'center' },
   title: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 100, color: '#2B0000' },
-  input: { backgroundColor: 'white', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#E4C4C4', marginBottom: 14 },
+  input: { backgroundColor: 'white', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#E4C4C4', marginBottom: 4 },
+  inputError: { borderColor: '#FF0000' },
+  errorText: { color: '#FF0000', fontSize: 12, marginBottom: 10, marginLeft: 4 },
   loginLink: { color: '#850a0a', textAlign: 'center', marginTop: 18, fontSize: 14, padding: 10 }
 });

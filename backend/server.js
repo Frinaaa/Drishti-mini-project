@@ -48,7 +48,7 @@ app.use('/api/ngo', require('./routes/ngo'));
 // This tells your server to use the notifications.js file for any request to /api/notifications
 app.use('/api/notifications', require('./routes/notifications'));
 // --- END OF FIX ---
-
+app.use('/api/alerts', require('./routes/alerts'));
 // --- 4. ROOT ROUTE AND SERVER STARTUP ---
 app.get('/', (req, res) => res.send('Drishti API is running successfully.'));
 
