@@ -55,6 +55,7 @@ const NotificationSchema = new Schema({
     is_read: { type: Boolean, default: false },
     created_at: { type: Date, default: Date.now }
 });
+// And replace it with this complete, updated version:
 const MissingReportSchema = new Schema({
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     person_name: { type: String, required: true },
@@ -66,10 +67,54 @@ const MissingReportSchema = new Schema({
     reporterContact: { type: String },
     familyEmail: { type: String },
     photo_url: { type: String },
-    status: { type: String, default: 'Pending', required: true },
-    pinCode: { type: String,required: true,},
-    reported_at: { type: Date, default: Date.now }
+    
+    // RECOMMENDED IMPROVEMENT: Use an enum for the status
+    // in backend/models.js -> MissingReportSchema
+
+status: { 
+    type: String, 
+    // Add "Pending Verification" to the list of allowed values
+    enum: ['Pending Verification', 'Pending', 'Verified', 'Rejected', 'Found'],
+    default: 'Pending Verification', // It's good practice to match the default
+    required: true 
+},
+    
+    pinCode: { type: String, required: true,},
+    reported_at: { type: Date, default: Date.now },
+
+    // =========================================================
+    // ===          ADD THESE TWO NEW FIELDS                 ===
+    // =========================================================
+    
+    // This timestamp is for the "Photos Reviewed Today" and "Reports Sent to Police" counters.
+    // It will be set when status becomes 'Verified' or 'Rejected'.
+    reviewedAt: {
+        type: Date
+    },
+
+    // This timestamp is for the "AI Matches Checked" counter.
+    // It will be set when status becomes 'Found'.
+    foundAt: {
+        type: Date
+    },
+    // =========================================================
+    // ===          ADD THESE TWO NEW FIELDS                 ===
+    // =========================================================
+    
+    // This will store the ID of the NGO who verified/rejected the report.
+    reviewedByNgo: {
+        type: Schema.Types.ObjectId,
+        ref: 'User' // This links to the User model
+    },
+
+    // This will store the ID of the NGO who marked the report as 'Found'.
+    foundByNgo: {
+        type: Schema.Types.ObjectId,
+        ref: 'User' // This links to the User model
+    }
 });
+
+
 const UploadedPhotoSchema = new Schema({
     uploader: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     location: { type: String, required: true },

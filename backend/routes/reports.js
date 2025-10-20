@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const nodemailer = require("nodemailer");
 const { MissingReport, Notification } = require("../models");
+const authMiddleware = require('../middleware/auth');
 
 /*
  * ===================================================================
@@ -303,35 +304,50 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+
+// in backend/routes/reports.js
+
 // --- 4. STATUS UPDATE LOGIC ---
 
-/**
- * @helper  updateReportStatus
- * @desc    A generic helper to update report status and send notifications.
- */
 async function updateReportStatus(req, res, newStatus) {
   try {
-    const report = await MissingReport.findById(req.params.id).populate(
-      "user",
-      "name email"
-    );
+    // Detective Log #1: Confirms the function was called
+    console.log(`\n--- [ACTION] Attempting to update report ${req.params.id} to status: "${newStatus}" ---`); 
+
+    const report = await MissingReport.findById(req.params.id).populate("user", "name email");
     if (!report) {
+      console.log("--- [ERROR] Report not found in database. ---");
       return res.status(404).json({ msg: "Report not found." });
     }
 
-    if (report.status !== "Pending Verification" && newStatus !== "Found") {
-      return res.status(400).json({
-        msg: `Report has already been actioned. Current status: ${report.status}`,
-      });
+    // Detective Log #2: This is the MOST IMPORTANT log. It reveals the current status.
+    console.log(`[INFO] Found report. Current status is: "${report.status}"`);
+
+    const ngoUserId = req.user.id;
+    console.log(`[INFO] Action performed by NGO with ID: ${ngoUserId}`);
+
+    // --- LOGIC FOR DASHBOARD TIMESTAMPS ---
+    if (newStatus === 'Verified' || newStatus === 'Rejected') {
+      if (report.status === 'Pending Verification') {
+          report.reviewedAt = new Date();
+          report.reviewedByNgo = ngoUserId;
+          console.log("✅ [SUCCESS] Timestamp 'reviewedAt' was ADDED.");
+      } else {
+          console.log("❌ [SKIPPED] Timestamp 'reviewedAt' was NOT added. Reason: Report status was not 'Pending Verification'.");
+      }
+    }
+    if (newStatus === 'Found') {
+        report.foundAt = new Date();
+        report.foundByNgo = ngoUserId;
+        console.log("✅ [SUCCESS] Timestamp 'foundAt' was ADDED.");
     }
 
     report.status = newStatus;
     await report.save();
+    console.log("--- [ACTION COMPLETE] Report successfully saved to database. ---");
 
-    let subject = "",
-      text = "",
-      inAppMessage = "";
-
+    // --- YOUR ORIGINAL NOTIFICATION LOGIC (MERGED BACK IN) ---
+    let subject = "", text = "", inAppMessage = "";
     switch (newStatus) {
       case "Verified":
         subject = `Update on Report for ${report.person_name}`;
@@ -349,42 +365,30 @@ async function updateReportStatus(req, res, newStatus) {
         inAppMessage = `Wonderful News! The missing person from your report, "${report.person_name}", has been found.`;
         break;
     }
-
-    // Send email if familyEmail was provided
     if (report.familyEmail) {
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: report.familyEmail,
-        subject,
-        text,
-      });
+      await transporter.sendMail({ from: process.env.EMAIL_USER, to: report.familyEmail, subject, text });
     }
-
-    // Send in-app notification to the original reporter
     if (report.user) {
-      await new Notification({
-        recipient: report.user._id,
-        message: inAppMessage,
-      }).save();
+      await new Notification({ recipient: report.user._id, message: inAppMessage }).save();
     }
 
-    res.json({
-      msg: `Report status updated to '${newStatus}'. Notifications sent.`,
-    });
+    res.json({ msg: `Report status updated to '${newStatus}'. Notifications sent.` });
+
   } catch (err) {
-    console.error(`Server Error updating status to '${newStatus}':`, err);
-    res
-      .status(500)
-      .json({ msg: `Server error during status update.`, error: err.message });
+    console.error(`--- [CRITICAL ERROR] Server crashed during status update:`, err);
+    res.status(500).json({ msg: `Server error during status update.` });
   }
 }
 
-router.put("/verify/:id", (req, res) =>
+// --- SECURE THE ROUTES ---
+router.put("/verify/:id", authMiddleware, (req, res) =>
   updateReportStatus(req, res, "Verified")
 );
-router.put("/reject/:id", (req, res) =>
+router.put("/reject/:id", authMiddleware, (req, res) =>
   updateReportStatus(req, res, "Rejected")
 );
-router.put("/found/:id", (req, res) => updateReportStatus(req, res, "Found"));
+router.put("/found/:id", authMiddleware, (req, res) => 
+  updateReportStatus(req, res, "Found")
+);
 
 module.exports = router;

@@ -34,7 +34,7 @@ try {
     if (response.ok) {
         // Existing logic
         await AsyncStorage.setItem('userId', responseData.user._id);
-        await AsyncStorage.setItem('token', responseData.token);
+       await AsyncStorage.setItem('userToken', responseData.token);
 
         // [+] ADD THIS LINE: Store the user's PIN code
         if (responseData.user.pinCode) {

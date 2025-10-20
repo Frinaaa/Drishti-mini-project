@@ -1,14 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // <-- IMPORT AsyncStorage
 
-// --- Static Data ---
-const overviewData = [
-    { title: "Photos Reviewed Today", value: "25", icon: "image-outline" as const },
-    { title: "AI Matches Checked", value: "15", icon: "git-compare-outline" as const },
-    { title: "Reports Sent to Police", value: "5", icon: "send-outline" as const },
-];
+// --- Static Data (Only for the "How to" section) ---
 const howToSteps = [
     "Step 1: Review photos sent by families.",
     "Step 2: Use scan tool to match with AI assistance.",
@@ -21,6 +17,53 @@ export default function NgoDashboardScreen() {
     const router = useRouter();
     const [instructionsVisible, setInstructionsVisible] = useState(false);
 
+    // --- STATE FOR LIVE DATA ---
+    const [stats, setStats] = useState({
+        photosReviewedToday: 0,
+        aiMatchesChecked: 0,
+        reportsSent: 0,
+    });
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    // --- DATA FETCHING LOGIC ---
+    useEffect(() => {
+        const fetchDashboardStats = async () => {
+            try {
+                // 1. Get the authentication token from storage
+                const authToken = await AsyncStorage.getItem('userToken');
+
+                if (!authToken) {
+                    throw new Error("Authentication token not found. Please log in again.");
+                }
+
+                // 2. Make the API call with the Authorization header
+                const response = await fetch('http://localhost:5000/api/ngo/dashboard-stats', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}` // <-- This is the crucial part
+                    }
+                });
+
+                if (!response.ok) {
+                    // This will handle errors like 401 Unauthorized if the token is bad
+                    throw new Error(`Server responded with an error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                setStats(data); // Update the state with the real, per-NGO numbers
+            } catch (err) {
+                console.error("Dashboard fetch error:", err);
+                setError(err.message);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchDashboardStats();
+    }, []); // Empty array ensures this runs only once when the screen loads
+
     return (
         <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -29,53 +72,46 @@ export default function NgoDashboardScreen() {
 
                 {/* --- Overview Section --- */}
                 <Text style={styles.sectionTitle}>Overview</Text>
-                <View style={styles.overviewContainer}>
-                    {overviewData.map((item, index) => (
-                        <View key={index} style={styles.overviewCard}>
-                            <Ionicons name={item.icon} size={30} color="#850a0a" />
-                            <Text style={styles.overviewTitle}>{item.title}</Text>
-                            <Text style={styles.overviewValue}>{item.value}</Text>
+
+                {isLoading ? (
+                    <ActivityIndicator size="large" color="#850a0a" style={{ marginVertical: 40 }} />
+                ) : error ? (
+                    <Text style={styles.errorText}>Could not load dashboard data. {error}</Text>
+                ) : (
+                    <View style={styles.overviewContainer}>
+                        <View style={styles.overviewCard}>
+                            <Ionicons name="image-outline" size={30} color="#850a0a" />
+                            <Text style={styles.overviewTitle}>Photos Reviewed Today</Text>
+                            <Text style={styles.overviewValue}>{stats.photosReviewedToday}</Text>
                         </View>
-                    ))}
-                </View>
+                        <View style={styles.overviewCard}>
+                            <Ionicons name="git-compare-outline" size={30} color="#850a0a" />
+                            <Text style={styles.overviewTitle}>AI Matches Checked</Text>
+                            <Text style={styles.overviewValue}>{stats.aiMatchesChecked}</Text>
+                        </View>
+                        <View style={styles.overviewCard}>
+                            <Ionicons name="send-outline" size={30} color="#850a0a" />
+                            <Text style={styles.overviewTitle}>Reports Sent to Police</Text>
+                            <Text style={styles.overviewValue}>{stats.reportsSent}</Text>
+                        </View>
+                    </View>
+                )}
                 
-                {/* --- Actions Section --- */}
+                {/* --- The rest of your component remains the same --- */}
                 <Text style={styles.sectionTitle}>Actions</Text>
-
-                {/* REMOVED: The "Submit Request to Police" button has been deleted. */}
-
-                {/* CORRECTED PATH: Navigation path is now correct for Expo Router. */}
-                <TouchableOpacity 
-                    style={styles.actionButton} 
-                    onPress={() => router.push('/recent-uploads')}
-                >
+                <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/recent-uploads')}>
                     <Ionicons name="images-outline" size={22} color="#3A0000" />
                     <Text style={styles.actionButtonText}>Recent Family Uploads</Text>
                 </TouchableOpacity>
-                
-                {/* CORRECTED PATH & TYPO: Navigation path is now correct and 'submit-reports' is fixed to 'submit-report'. */}
-                <TouchableOpacity 
-                    style={styles.actionButton} 
-                    onPress={() => router.push('/submit-reports')}
-                >
+                <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/submit-reports')}>
                     <Ionicons name="person-add-outline" size={22} color="#3A0000" />
                     <Text style={styles.actionButtonText}>Register Missing Person</Text>
                 </TouchableOpacity>
-
-                {/* --- How to Use Dashboard Section --- */}
-                <TouchableOpacity 
-                  style={styles.howToContainer} 
-                  onPress={() => setInstructionsVisible(!instructionsVisible)}
-                  activeOpacity={0.8}
-                >
+                <TouchableOpacity style={styles.howToContainer} onPress={() => setInstructionsVisible(!instructionsVisible)} activeOpacity={0.8}>
                     <View style={styles.howToHeader}>
                         <Ionicons name="shield-checkmark-outline" size={22} color="#3A0000" />
                         <Text style={styles.howToTitle}>How to Use Dashboard</Text>
-                        <Ionicons 
-                          name={instructionsVisible ? 'chevron-up-outline' : 'chevron-down-outline'} 
-                          size={22} 
-                          color="#3A0000" 
-                        />
+                        <Ionicons name={instructionsVisible ? 'chevron-up-outline' : 'chevron-down-outline'} size={22} color="#3A0000" />
                     </View>
                     {instructionsVisible && (
                         <View style={styles.howToContent}>
@@ -107,4 +143,5 @@ const styles = StyleSheet.create({
     howToTitle: { flex: 1, fontSize: 16, fontWeight: 'bold', color: '#3A0000', marginLeft: 10 },
     howToContent: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#E4C4C4', paddingTop: 12 },
     howToStep: { fontSize: 14, color: '#5B4242', lineHeight: 20, marginBottom: 4 },
+    errorText: { color: '#B94E4E', textAlign: 'center', marginVertical: 40, fontSize: 16, },
 });
