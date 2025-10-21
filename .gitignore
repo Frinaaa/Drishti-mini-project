@@ -37,7 +37,7 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
-_pycache_
+__pycache__
 report_metadata.json
 ds_model_vggface_detector_retinaface_aligned_normalization_base_expand_0.pkl
 representations_vgg_face.pkl
