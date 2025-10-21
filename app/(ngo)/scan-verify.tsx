@@ -125,6 +125,10 @@ export default function ScanVerifyScreen() {
   const { currentStatus, updateStatus, pulseAnimation } = useStatusManager();
 
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('back');
+  const toggleCameraFacing = useCallback(() => {
+    setCameraFacing(prev => (prev === 'front' ? 'back' : 'front'));
+  }, []);
   const [foundMatches, setFoundMatches] = useState<FoundMatch[]>([]);
   const [faceBox, setFaceBox] = useState<any>(null);
   const [lastPhotoDims, setLastPhotoDims] = useState({ width: 1, height: 1 });
@@ -141,17 +145,23 @@ export default function ScanVerifyScreen() {
     if (callback) setTimeout(callback, 100);
   };
 
-  const sendFrame = useCallback(async () => {
-    if (cameraRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
-      try {
-        const photo = await cameraRef.current.takePictureAsync({ quality: IMAGE_QUALITY, base64: true, exif: false });
-        if (photo?.base64) {
-          setLastPhotoDims({ width: photo.width, height: photo.height });
-          wsRef.current.send(photo.base64);
-        }
-      } catch { console.warn("Error sending frame"); }
+  // Replace the old sendFrame function with this one:
+const sendFrame = useCallback(async () => {
+    // This check prevents errors if the camera isn't ready
+    if (!cameraRef.current || wsRef.current?.readyState !== WebSocket.OPEN) {
+      return;
     }
-  }, [cameraRef, wsRef]);
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: IMAGE_QUALITY, base64: true, exif: false });
+      if (photo?.base64) {
+        setLastPhotoDims({ width: photo.width, height: photo.height });
+        wsRef.current.send(photo.base64);
+      }
+    } catch (e) { 
+      // This improved catch prevents a crash if taking a picture fails
+      console.warn("Could not take or send picture frame:", e); 
+    }
+}, [cameraRef, wsRef]);
 
   const fetchReportDetails = useCallback(async (filename: string): Promise<ReportDetails | null> => {
     try {
@@ -184,17 +194,20 @@ export default function ScanVerifyScreen() {
     };
   }, [isStreaming, isCameraReady, sendFrame]);
 
-  const connectWebSocket = useCallback(() => {
+  // Replace the old connectWebSocket function with this one:
+const connectWebSocket = useCallback(() => {
     if (!AI_API_URL) { updateStatus("API URL not configured. Check config/api.js", "error"); return; }
     const wsUrl = AI_API_URL.replace(/^http/, "ws") + "/ws/live_stream";
     wsRef.current = new WebSocket(wsUrl);
     updateStatus("🔄 Connecting to server...", "connecting", true);
+    
     const connectionTimeout = setTimeout(() => {
       if (wsRef.current?.readyState !== WebSocket.OPEN) {
         updateStatus(`❌ Connection failed. Check server & network.`, "error");
         wsRef.current?.close(); setIsStreaming(false);
       }
     }, CONNECTION_TIMEOUT);
+
     wsRef.current.onopen = () => {
       clearTimeout(connectionTimeout);
       setConnectionAttempts(0);
@@ -202,13 +215,24 @@ export default function ScanVerifyScreen() {
       setTimeout(() => updateStatus("📹 Streaming active - Position face in camera", "streaming"), 1000);
       setIsStreaming(true);
     };
+
     wsRef.current.onmessage = async (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.face_detected && data.face_box) {
           const { width: photoWidth, height: photoHeight } = lastPhotoDims;
-          const scaleX = screenWidth / photoWidth; const scaleY = CAMERA_VIEW_HEIGHT / photoHeight;
-          setFaceBox({ top: data.face_box.y * scaleY, left: data.face_box.x * scaleX, width: data.face_box.width * scaleX, height: data.face_box.height * scaleY });
+          const scaleX = screenWidth / photoWidth; 
+          const scaleY = CAMERA_VIEW_HEIGHT / photoHeight;
+          
+          let finalX = data.face_box.x * scaleX;
+          const boxWidth = data.face_box.width * scaleX;
+
+          // ADDITION 1: Mirror the x-coordinate if using the front camera
+          if (cameraFacing === 'front') {
+            finalX = screenWidth - (finalX + boxWidth);
+          }
+
+          setFaceBox({ top: data.face_box.y * scaleY, left: finalX, width: boxWidth, height: data.face_box.height * scaleY });
           updateStatus("👤 Face detected - Scanning database...", "processing", true);
         } else {
           setFaceBox(null);
@@ -220,28 +244,31 @@ export default function ScanVerifyScreen() {
           if (!isAlreadyFound) {
             updateStatus(`🎯 Match found! Confidence: ${(newMatch.confidence * 100).toFixed(1)}%`, "success", true);
             const reportDetails = await fetchReportDetails(newMatch.filename);
-            const photo = await cameraRef.current?.takePictureAsync({ quality: 0.5 });
+            
+            // ADDITION 2: Defensive check before taking confirmation photo
+            if (!cameraRef.current) {
+              console.warn("Match found, but camera was not available to take confirmation photo.");
+              return; // Exit safely
+            }
+            
+            const photo = await cameraRef.current.takePictureAsync({ quality: 0.5 });
             if (photo) {
               const matchWithDetails = { ...newMatch, liveCaptureUri: photo.uri, reportDetails, reportId: reportDetails?._id };
               setFoundMatches(prev => [matchWithDetails, ...prev]);
             }
           }
         }
-      } catch { updateStatus("⚠️ Processing error - continuing...", "warning"); }
+      } catch(e) { 
+        updateStatus("⚠️ Processing error - continuing...", "warning"); 
+        console.error("Error processing WebSocket message:", e);
+      }
     };
-    wsRef.current.onerror = () => {
-      clearTimeout(connectionTimeout);
-      updateStatus("❌ Connection error. Check network and server.", "error");
-      setIsStreaming(false);
-    };
-    wsRef.current.onclose = () => {
-      clearTimeout(connectionTimeout);
-      updateStatus(`🔌 Connection lost - Tap to reconnect`, "warning");
-      setIsStreaming(false);
-      setFaceBox(null);
-    };
-  }, [updateStatus, connectionAttempts, setIsStreaming, setConnectionAttempts, lastPhotoDims, foundMatches, fetchReportDetails, cameraRef, wsRef]);
-
+    
+    wsRef.current.onerror = () => { clearTimeout(connectionTimeout); updateStatus("❌ Connection error. Check network and server.", "error"); setIsStreaming(false); };
+    wsRef.current.onclose = () => { clearTimeout(connectionTimeout); updateStatus(`🔌 Connection lost - Tap to reconnect`, "warning"); setIsStreaming(false); setFaceBox(null); };
+    
+// ADDITION 3: Add 'cameraFacing' to the dependency array at the end
+}, [updateStatus, connectionAttempts, setIsStreaming, setConnectionAttempts, lastPhotoDims, foundMatches, fetchReportDetails, cameraRef, wsRef, cameraFacing]);
   const toggleStreaming = useCallback(() => {
     if (isStreaming) {
       disconnectWebSocket();
@@ -318,15 +345,28 @@ export default function ScanVerifyScreen() {
   return (
     <>
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}><Ionicons name="arrow-back" size={24} color="#000" /></TouchableOpacity>
+       
         <Text style={styles.header}>Live Face Scan</Text>
-        <View style={styles.cameraContainer}>
-          <CameraView ref={cameraRef} style={styles.camera} facing="back" onCameraReady={() => setIsCameraReady(true)}/>
-          <View style={StyleSheet.absoluteFill}>
-            {faceBox && (<View style={[styles.faceBox, { top: faceBox.top, left: faceBox.left, width: faceBox.width, height: faceBox.height, }]}/>)}
+          <View style={styles.cameraWrapper}>
+          {/* The original container still clips the camera view itself */}
+          <View style={styles.cameraContainer}>
+            <CameraView
+              ref={cameraRef}
+              style={styles.camera}
+              facing={cameraFacing}
+              onCameraReady={() => setIsCameraReady(true)}
+            />
+            <View style={StyleSheet.absoluteFill}>
+              {faceBox && (<View style={[styles.faceBox, { top: faceBox.top, left: faceBox.left, width: faceBox.width, height: faceBox.height, }]}/>)}
+            </View>
+            <TouchableOpacity style={styles.scanButton} onPress={toggleStreaming}>
+              <Text style={styles.scanButtonText}>{isStreaming ? "Stop Scan" : "Start Live Scan"}</Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.scanButton} onPress={toggleStreaming}>
-            <Text style={styles.scanButtonText}>{isStreaming ? "Stop Scan" : "Start Live Scan"}</Text>
+
+          {/* The switch button is now a SIBLING, outside the clipping container */}
+          <TouchableOpacity style={styles.cameraSwitchButton} onPress={toggleCameraFacing}>
+            <Ionicons name="camera-reverse-outline" size={30} color="white" />
           </TouchableOpacity>
         </View>
         {StatusCard}
@@ -550,4 +590,20 @@ const styles = StyleSheet.create({
   disabledButton: {
     backgroundColor: "#cccccc",
   },
+  // --- ADDITION 4: Style for the new camera switch button ---
+  // --- ADD THIS NEW STYLE ---
+    cameraWrapper: {
+      marginBottom: 20, // This margin was previously on cameraContainer
+      position: 'relative', // Ensures absolute positioning works correctly for children
+    },
+    cameraSwitchButton: {
+      position: 'absolute',
+      top: 15, // Positioned relative to cameraWrapper
+      right: 15, // Positioned relative to cameraWrapper
+      zIndex: 10, // Increased zIndex to ensure it's on top of everything
+      padding: 8,
+      backgroundColor: 'rgba(0, 0, 0, 0.4)',
+      borderRadius: 30,
+    },
+  
 });

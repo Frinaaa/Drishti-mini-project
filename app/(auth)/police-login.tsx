@@ -12,11 +12,68 @@ export default function PoliceLoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  const validateInput = (input: string): { isEmail: boolean; isPoliceId: boolean; isValid: boolean } => {
+    // Email validation
+    const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
+    const isEmail = emailRegex.test(input);
+    
+    // Police ID validation (assuming format: P-XXXXX where X is a number)
+    const policeIdRegex = /^P-\d{5}$/;
+    const isPoliceId = policeIdRegex.test(input);
+
+    return {
+      isEmail,
+      isPoliceId,
+      isValid: isEmail || isPoliceId
+    };
+  };
+
+  const validateEmail = (input: string): boolean => {
+    if (!input) {
+      setEmailError('Email or Police ID is required');
+      return false;
+    }
+
+    const validation = validateInput(input);
+    
+    if (!validation.isValid) {
+      if (input.startsWith('P-')) {
+        setEmailError('Invalid Police ID format. Use P-XXXXX (e.g., P-12345)');
+      } else {
+        setEmailError('Please enter a valid email address or Police ID');
+      }
+      return false;
+    }
+
+    setEmailError('');
+    return true;
+  };
+
+  const validatePassword = (pass: string): boolean => {
+    if (!pass) {
+      setPasswordError('Password is required');
+      return false;
+    }
+    if (pass.length < 6) {
+      setPasswordError('Password must be at least 6 characters long');
+      return false;
+    }
+    setPasswordError('');
+    return true;
+  };
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      return Alert.alert('Error', 'Please enter your email and password.');
+    if (!validateEmail(email)) {
+      return Alert.alert('Invalid Email/ID', emailError);
     }
+
+    if (!validatePassword(password)) {
+      return Alert.alert('Invalid Password', passwordError);
+    }
+
     setLoading(true);
 
     try {
@@ -48,8 +105,17 @@ export default function PoliceLoginScreen() {
           Alert.alert('Access Denied', 'This login portal is for Police Officers only.');
         }
       } else {
-         // This handles backend errors like "Invalid credentials"
-         Alert.alert('Login Failed', data.msg || 'Invalid credentials.');
+        // Check if the error is about an unregistered email
+        if (data.msg?.toLowerCase().includes('not registered') || data.msg?.toLowerCase().includes('not found')) {
+          Alert.alert(
+            'Unregistered Account',
+            'This email/Police ID is not registered in our system. Please contact your department administrator for registration.',
+            [{ text: 'OK' }]
+          );
+        } else {
+          // Handle other login errors
+          Alert.alert('Login Failed', data.msg || 'Invalid credentials.');
+        }
       }
     } catch (error) {
        console.error('Login error:', error);
@@ -63,22 +129,37 @@ export default function PoliceLoginScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Police Officer Login</Text>
       
-      <TextInput 
-        style={styles.input} 
-        placeholder="Email or Police ID" 
-        placeholderTextColor="#b94e4e" 
-        value={email} 
-        onChangeText={setEmail} 
-        autoCapitalize="none" 
-      />
-      <TextInput 
-        style={styles.input} 
-        placeholder="Password" 
-        placeholderTextColor="#b94e4e" 
-        value={password} 
-        onChangeText={setPassword} 
-        secureTextEntry 
-      />
+      <View>
+        <TextInput 
+          style={[styles.input, emailError ? styles.inputError : null]} 
+          placeholder="Email or Police ID" 
+          placeholderTextColor="#b94e4e" 
+          value={email} 
+          onChangeText={(text) => {
+            setEmail(text);
+            validateEmail(text);
+          }}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
+      </View>
+      
+      <View>
+        <TextInput 
+          style={[styles.input, passwordError ? styles.inputError : null]} 
+          placeholder="Password" 
+          placeholderTextColor="#b94e4e" 
+          value={password} 
+          onChangeText={(text) => {
+            setPassword(text);
+            validatePassword(text);
+          }}
+          secureTextEntry
+          textContentType="password"
+        />
+        {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
+      </View>
       
       {loading ? (
         <ActivityIndicator size="large" color="#850a0a" style={{ marginTop: 10, marginBottom: 10 }} />
@@ -113,7 +194,16 @@ const styles = StyleSheet.create({
     padding: 12, 
     borderWidth: 1, 
     borderColor: '#E4C4C4', 
-    marginBottom: 14 
+    marginBottom: 4 
+  },
+  inputError: {
+    borderColor: '#FF0000'
+  },
+  errorText: {
+    color: '#FF0000',
+    fontSize: 12,
+    marginBottom: 10,
+    marginLeft: 4
   },
   linkText: {
     color: '#850a0a', 
