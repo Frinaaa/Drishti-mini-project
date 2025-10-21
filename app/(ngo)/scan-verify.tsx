@@ -12,7 +12,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
-  // Alert, // We will use CustomAlert instead
   Platform,
   ScrollView,
   Dimensions,
@@ -22,13 +21,15 @@ import { CameraView, Camera } from "expo-camera";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { AI_API_URL, BACKEND_API_URL } from "../../config/api";
-// --- FIX #1: Import the CustomAlert component ---
 import CustomAlert from "../../components/CustomAlert";
 
 // --- (Constants and Types are unchanged) ---
 const { width: screenWidth } = Dimensions.get("window");
 const CAMERA_VIEW_HEIGHT = 350;
-const FRAME_INTERVAL = 300;
+// --- MODIFIED CONSTANTS ---
+const FRAME_INTERVAL = 750; // Slower frame rate to reduce server load
+const IMAGE_QUALITY = 0.1; // Lower quality to reduce network traffic
+// ------------------------
 const CONNECTION_TIMEOUT = 8000;
 const MIN_CONFIDENCE_THRESHOLD = 40;
 
@@ -128,11 +129,15 @@ const useStatusManager = () => {
 
 const useWebSocketManager = () => {
   const wsRef = useRef<WebSocket | null>(null);
-  const frameSenderIntervalRef = useRef<number | null>(null);
+  const frameSenderIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
 
   const disconnectWebSocket = useCallback(() => {
+    if (frameSenderIntervalRef.current) {
+        clearInterval(frameSenderIntervalRef.current);
+        frameSenderIntervalRef.current = null;
+    }
     wsRef.current?.close();
     wsRef.current = null;
     setIsStreaming(false);
@@ -169,7 +174,6 @@ export default function ScanVerifyScreen() {
   const [faceBox, setFaceBox] = useState<any>(null);
   const [lastPhotoDims, setLastPhotoDims] = useState({ width: 1, height: 1 });
 
-  // --- FIX #2: Add state management for the CustomAlert ---
   const [alert, setAlert] = useState({
     visible: false,
     title: "",
@@ -196,14 +200,14 @@ export default function ScanVerifyScreen() {
     }));
     if (callback) setTimeout(callback, 100);
   };
-  // --- END OF FIX ---
-
+  
   const sendFrame = useCallback(async () => {
     if (cameraRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
       try {
         const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.3,
+          quality: IMAGE_QUALITY, // Use lower quality
           base64: true,
+          exif: false, // Disable exif for smaller size
         });
         if (photo?.base64) {
           setLastPhotoDims({ width: photo.width, height: photo.height });
@@ -225,8 +229,7 @@ export default function ScanVerifyScreen() {
           console.warn(`Could not fetch details for ${filename}`);
           return null;
         }
-        const reportDetails: ReportDetails = await response.json();
-        return reportDetails;
+        return await response.json();
       } catch (error) {
         console.error("Error fetching report details:", error);
         return null;
@@ -237,27 +240,22 @@ export default function ScanVerifyScreen() {
 
   useEffect(() => {
     Camera.requestCameraPermissionsAsync();
-    return () => {
-      disconnectWebSocket();
-      if (frameSenderIntervalRef.current) {
-        clearInterval(frameSenderIntervalRef.current);
-      }
-    };
-  }, [disconnectWebSocket, frameSenderIntervalRef]);
+    return () => disconnectWebSocket();
+  }, [disconnectWebSocket]);
 
   useEffect(() => {
     if (isStreaming && isCameraReady) {
-      frameSenderIntervalRef.current = setInterval(sendFrame, FRAME_INTERVAL);
+      frameSenderIntervalRef.current = setInterval(sendFrame, FRAME_INTERVAL); // Use slower interval
     }
     return () => {
       if (frameSenderIntervalRef.current) {
         clearInterval(frameSenderIntervalRef.current);
+        frameSenderIntervalRef.current = null;
       }
     };
   }, [isStreaming, isCameraReady, sendFrame, frameSenderIntervalRef]);
 
   const connectWebSocket = useCallback(() => {
-    // ... (connectWebSocket logic is unchanged)
     if (!AI_API_URL) {
       updateStatus("API URL not configured. Check config/api.js", "error");
       return;
@@ -269,12 +267,8 @@ export default function ScanVerifyScreen() {
 
     const connectionTimeout = setTimeout(() => {
       if (wsRef.current?.readyState !== WebSocket.OPEN) {
-        updateStatus(
-          `❌ Connection failed (${connectionAttempts} attempts). Check server & network.`,
-          "error"
-        );
-        wsRef.current?.close();
-        setIsStreaming(false);
+        updateStatus(`❌ Connection failed. Check server & network.`, "error");
+        wsRef.current?.close(); setIsStreaming(false);
       }
     }, CONNECTION_TIMEOUT);
 
@@ -282,12 +276,7 @@ export default function ScanVerifyScreen() {
       clearTimeout(connectionTimeout);
       setConnectionAttempts(0);
       updateStatus("✅ Connected! Analyzing faces...", "connected");
-      setTimeout(() => {
-        updateStatus(
-          "📹 Streaming active - Position face in camera",
-          "streaming"
-        );
-      }, 1000);
+      setTimeout(() => updateStatus("📹 Streaming active - Position face in camera", "streaming"), 1000);
       setIsStreaming(true);
     };
 
@@ -297,107 +286,58 @@ export default function ScanVerifyScreen() {
 
         if (data.face_detected && data.face_box) {
           const { width: photoWidth, height: photoHeight } = lastPhotoDims;
-          const scaleX = screenWidth / photoWidth;
-          const scaleY = CAMERA_VIEW_HEIGHT / photoHeight;
+          const scaleX = screenWidth / photoWidth; const scaleY = CAMERA_VIEW_HEIGHT / photoHeight;
           setFaceBox({
-            top: data.face_box.y * scaleY,
-            left: data.face_box.x * scaleX,
-            width: data.face_box.width * scaleX,
-            height: data.face_box.height * scaleY,
+            top: data.face_box.y * scaleY, left: data.face_box.x * scaleX,
+            width: data.face_box.width * scaleX, height: data.face_box.height * scaleY,
           });
-
-          if (data.match_result?.match_found) {
-            updateStatus("🎯 Processing match result...", "processing", true);
-          } else if (
-            data.match_result === null ||
-            (data.match_result && !data.match_result.match_found)
-          ) {
-            updateStatus(
-              "✅ Face detected - Scanning database images...",
-              "processing"
-            );
-          } else {
-            updateStatus(
-              "👤 Face detected - Scanning database...",
-              "processing",
-              true
-            );
-          }
+          updateStatus("👤 Face detected - Scanning database...", "processing", true);
         } else {
           setFaceBox(null);
           updateStatus("🔍 Looking for faces...", "streaming");
         }
-
+        
         const newMatch = data.match_result;
+        // --- MODIFIED MATCH HANDLING ---
         if (newMatch?.match_found) {
-          const confidencePercentage = newMatch.confidence * 100;
-          if (confidencePercentage >= MIN_CONFIDENCE_THRESHOLD) {
-            const isAlreadyFound = foundMatches.some(
-              (m) => m.filename === newMatch.filename
-            );
+            // Check if this person is already in our list
+            const isAlreadyFound = foundMatches.some(m => m.filename === newMatch.filename);
+            
             if (!isAlreadyFound) {
-              updateStatus(
-                `🎯 Match found! Confidence: ${confidencePercentage.toFixed(
-                  1
-                )}%`,
-                "success",
-                true
-              );
-
-              const reportDetails = await fetchReportDetails(newMatch.filename);
-              const photo = await cameraRef.current?.takePictureAsync({
-                quality: 0.7,
-              });
-
-              if (photo) {
-                const matchWithDetails = {
-                  ...newMatch,
-                  liveCaptureUri: photo.uri,
-                  reportDetails,
-                  reportId: reportDetails?._id,
-                };
-                setFoundMatches((prev) => [matchWithDetails, ...prev]);
-              }
+                updateStatus(`🎯 Match found! Confidence: ${(newMatch.confidence * 100).toFixed(1)}%`, "success", true);
+                
+                const reportDetails = await fetchReportDetails(newMatch.filename);
+                const photo = await cameraRef.current?.takePictureAsync({ quality: 0.5 }); // Take a slightly better photo for the card
+                
+                if (photo) {
+                    const matchWithDetails = {
+                        ...newMatch,
+                        liveCaptureUri: photo.uri,
+                        reportDetails,
+                        reportId: reportDetails?._id,
+                    };
+                    setFoundMatches(prev => [matchWithDetails, ...prev]);
+                }
             }
-          } else {
-            updateStatus(
-              `⚠️ Potential match (${confidencePercentage.toFixed(
-                1
-              )}%) - below ${MIN_CONFIDENCE_THRESHOLD}% threshold`,
-              "warning"
-            );
-          }
         }
       } catch {
         updateStatus("⚠️ Processing error - continuing...", "warning");
       }
     };
 
-    wsRef.current.onerror = (error) => {
+    wsRef.current.onerror = () => {
       clearTimeout(connectionTimeout);
       updateStatus("❌ Connection error. Check network and server.", "error");
       setIsStreaming(false);
     };
 
-    wsRef.current.onclose = (event) => {
+    wsRef.current.onclose = () => {
       clearTimeout(connectionTimeout);
-      const reason =
-        event.code === 1000 ? "Server closed connection" : "Connection lost";
-      updateStatus(`🔌 ${reason} - Tap to reconnect`, "warning");
+      updateStatus(`🔌 Connection lost - Tap to reconnect`, "warning");
       setIsStreaming(false);
       setFaceBox(null);
     };
-  }, [
-    updateStatus,
-    connectionAttempts,
-    setIsStreaming,
-    setConnectionAttempts,
-    lastPhotoDims,
-    foundMatches,
-    fetchReportDetails,
-    cameraRef,
-    wsRef,
-  ]);
+  }, [updateStatus, connectionAttempts, setIsStreaming, setConnectionAttempts, lastPhotoDims, foundMatches, fetchReportDetails, cameraRef, wsRef]);
 
   const toggleStreaming = useCallback(() => {
     if (isStreaming) {
@@ -409,294 +349,109 @@ export default function ScanVerifyScreen() {
     }
   }, [isStreaming, disconnectWebSocket, updateStatus, connectWebSocket]);
 
-  // --- FIX #3: Refactor handleConfirmOrReject to use the new showAlert function ---
   const handleConfirmOrReject = useCallback(
     async (isConfirm: boolean, matchToRemove: FoundMatch) => {
       if (!isConfirm) {
-        showAlert(
-          "Match Rejected",
-          "Thank you for your feedback. This result will be dismissed.",
-          "info",
-          () => {
-            setFoundMatches((prev) =>
-              prev.filter((m) => m.filename !== matchToRemove.filename)
-            );
-          }
-        );
+        showAlert("Match Rejected","This result will be dismissed.", "info", () => {
+            setFoundMatches(prev => prev.filter(m => m.filename !== matchToRemove.filename));
+        });
         return;
       }
-
       if (matchToRemove.reportDetails?.status === "Found") {
-        showAlert(
-          "Already Found",
-          "This report has already been marked as 'Found'. No further action is needed.",
-          "info"
-        );
+        showAlert("Already Found","This report has already been marked as 'Found'.", "info");
         return;
       }
-
       if (matchToRemove.reportId) {
         try {
-          const response = await fetch(
-            `${BACKEND_API_URL}/api/reports/found/${matchToRemove.reportId}`,
-            {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-            }
-          );
+          const response = await fetch(`${BACKEND_API_URL}/api/reports/found/${matchToRemove.reportId}`, { method: "PUT" });
           const data = await response.json();
-
-          if (!response.ok) {
-            throw new Error(data.msg || "Failed to update report status.");
-          }
-
+          if (!response.ok) throw new Error(data.msg || "Failed to update report status.");
           showAlert("Match Confirmed!", data.msg, "success", () => {
-            setFoundMatches((prev) =>
-              prev.filter((m) => m.reportId !== matchToRemove.reportId)
-            );
+            setFoundMatches(prev => prev.filter(m => m.reportId !== matchToRemove.reportId));
             router.push("/(ngo)/ngo-dashboard");
           });
         } catch (error) {
-          const errorMessage =
-            error instanceof Error
-              ? error.message
-              : "An unknown error occurred.";
-          showAlert(
-            "Confirmation Failed",
-            `Could not update the report. Reason: ${errorMessage}`,
-            "error"
-          );
+          showAlert("Confirmation Failed",`Could not update report: ${error instanceof Error ? error.message : "Unknown error"}`, "error");
         }
       } else {
-        showAlert(
-          "Confirmation Error",
-          "Cannot confirm match because the report ID is missing.",
-          "error"
-        );
+        showAlert("Confirmation Error", "Cannot confirm match because report ID is missing.", "error");
       }
     },
     [setFoundMatches, router]
   );
-  // --- END OF FIX ---
-
-  const StatusCard = useMemo(
-    () => (
-      // ... (StatusCard logic is unchanged)
-      <View
-        style={[
-          styles.statusCard,
-          { backgroundColor: STATUS_CONFIG[currentStatus.type].bgColor },
-        ]}
-      >
+  
+  const StatusCard = useMemo(() => (
+      <View style={[styles.statusCard, { backgroundColor: STATUS_CONFIG[currentStatus.type].bgColor }]}>
         <View style={styles.statusHeader}>
-          <MaterialIcons
-            name={STATUS_CONFIG[currentStatus.type].icon as any}
-            size={20}
-            color={STATUS_CONFIG[currentStatus.type].color}
-            style={styles.statusIcon}
-          />
-          <Text
-            style={[
-              styles.cardTitle,
-              { color: STATUS_CONFIG[currentStatus.type].color },
-            ]}
-          >
-            {isStreaming ? "Live Scanning" : "Scan Status"}
-          </Text>
+          <MaterialIcons name={STATUS_CONFIG[currentStatus.type].icon as any} size={20} color={STATUS_CONFIG[currentStatus.type].color} style={styles.statusIcon}/>
+          <Text style={[styles.cardTitle, { color: STATUS_CONFIG[currentStatus.type].color }]}>{isStreaming ? "Live Scanning" : "Scan Status"}</Text>
         </View>
-        <Animated.Text
-          style={[
-            styles.statusMessage,
-            {
-              color: STATUS_CONFIG[currentStatus.type].color,
-              transform: currentStatus.animated
-                ? [{ scale: pulseAnimation }]
-                : [{ scale: 1 }],
-            },
-          ]}
-        >
+        <Animated.Text style={[styles.statusMessage, { color: STATUS_CONFIG[currentStatus.type].color, transform: currentStatus.animated ? [{ scale: pulseAnimation }] : [{ scale: 1 }], }]}>
           {currentStatus.message}
         </Animated.Text>
       </View>
-    ),
-    [currentStatus, isStreaming, pulseAnimation]
-  );
+    ), [currentStatus, isStreaming, pulseAnimation]);
 
   return (
     <>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.contentContainer}
-      >
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
+      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}><Ionicons name="arrow-back" size={24} color="#000" /></TouchableOpacity>
         <Text style={styles.header}>Live Face Scan</Text>
-
         <View style={styles.cameraContainer}>
-          <CameraView
-            ref={cameraRef}
-            style={styles.camera}
-            facing="back"
-            onCameraReady={() => setIsCameraReady(true)}
-          />
+          <CameraView ref={cameraRef} style={styles.camera} facing="back" onCameraReady={() => setIsCameraReady(true)}/>
           <View style={StyleSheet.absoluteFill}>
-            {faceBox && (
-              <View
-                style={[
-                  styles.faceBox,
-                  {
-                    top: faceBox.top,
-                    left: faceBox.left,
-                    width: faceBox.width,
-                    height: faceBox.height,
-                  },
-                ]}
-              />
-            )}
+            {faceBox && (<View style={[styles.faceBox, { top: faceBox.top, left: faceBox.left, width: faceBox.width, height: faceBox.height, }]}/>)}
           </View>
           <TouchableOpacity style={styles.scanButton} onPress={toggleStreaming}>
-            <Text style={styles.scanButtonText}>
-              {isStreaming ? "Stop Scan" : "Start Live Scan"}
-            </Text>
+            <Text style={styles.scanButtonText}>{isStreaming ? "Stop Scan" : "Start Live Scan"}</Text>
           </TouchableOpacity>
         </View>
-
         {StatusCard}
-
         {foundMatches.length > 0 && (
           <View style={styles.matchListContainer}>
-            <Text style={styles.matchListHeader}>
-              Found Matches ({foundMatches.length})
-            </Text>
-            <ScrollView
-              horizontal={true}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.matchListScrollView}
-            >
-              {foundMatches.map((match, index) => (
-                <MatchCard
-                  key={`${match.reportId || match.filename}-${index}`}
-                  match={match}
-                  onAction={handleConfirmOrReject}
-                />
-              ))}
+            <Text style={styles.matchListHeader}>Found Matches ({foundMatches.length})</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.matchListScrollView}>
+              {foundMatches.map((match, index) => (<MatchCard key={`${match.reportId || match.filename}-${index}`} match={match} onAction={handleConfirmOrReject}/>))}
             </ScrollView>
           </View>
         )}
       </ScrollView>
-      {/* --- FIX #4: Render the CustomAlert component --- */}
-      <CustomAlert
-        visible={alert.visible}
-        title={alert.title}
-        message={alert.message}
-        type={alert.type}
-        onClose={hideAlert}
-      />
+      <CustomAlert visible={alert.visible} title={alert.title} message={alert.message} type={alert.type} onClose={hideAlert}/>
     </>
   );
 }
 
-const MatchCard = React.memo(
-  ({
-    match,
-    onAction,
-  }: {
-    match: FoundMatch;
-    onAction: (isConfirm: boolean, match: FoundMatch) => void;
-  }) => {
-    const confidencePercentage = useMemo(
-      () => (match.confidence * 100).toFixed(1),
-      [match.confidence]
-    );
-    const matchedImageUri = useMemo(
-      () => `${AI_API_URL}/${match.file_path}`,
-      [match.file_path]
-    );
-
+const MatchCard = React.memo(({ match, onAction }: { match: FoundMatch; onAction: (isConfirm: boolean, match: FoundMatch) => void; }) => {
+    const confidencePercentage = useMemo(() => (match.confidence * 100).toFixed(1), [match.confidence]);
+    const matchedImageUri = useMemo(() => `${AI_API_URL}/${match.file_path}`, [match.file_path]);
     const isAlreadyFound = match.reportDetails?.status === "Found";
-
     return (
       <View style={styles.resultsCard}>
         <View style={styles.imageComparisonContainer}>
-          <View style={styles.imageBox}>
-            <Text style={styles.imageLabel}>Live Capture</Text>
-            <Image
-              source={{ uri: match.liveCaptureUri }}
-              style={styles.resultImage}
-            />
-          </View>
-          <View style={styles.imageBox}>
-            <Text style={styles.imageLabel}>Database Record</Text>
-            <Image
-              source={{ uri: matchedImageUri }}
-              style={styles.resultImage}
-            />
-          </View>
+          <View style={styles.imageBox}><Text style={styles.imageLabel}>Live Capture</Text><Image source={{ uri: match.liveCaptureUri }} style={styles.resultImage}/></View>
+          <View style={styles.imageBox}><Text style={styles.imageLabel}>Database Record</Text><Image source={{ uri: matchedImageUri }} style={styles.resultImage}/></View>
         </View>
         {match.reportDetails && (
           <View style={styles.reportDetailsContainer}>
-            <Text style={styles.reportTitle}>
-              {match.reportDetails.person_name}
-            </Text>
+            <Text style={styles.reportTitle}>{match.reportDetails.person_name}</Text>
             <View style={styles.reportInfo}>
-              <Text style={styles.reportText}>
-                Age: {match.reportDetails.age} | Gender:{" "}
-                {match.reportDetails.gender}
-              </Text>
-              <Text
-                style={[
-                  styles.reportText,
-                  isAlreadyFound && { color: "#2E7D32", fontWeight: "bold" },
-                ]}
-              >
-                Status: {match.reportDetails.status}
-              </Text>
-              <Text style={styles.reportText} numberOfLines={2}>
-                Last Seen: {match.reportDetails.last_seen}
-              </Text>
+              <Text style={styles.reportText}>Age: {match.reportDetails.age} | Gender: {match.reportDetails.gender}</Text>
+              <Text style={[styles.reportText, isAlreadyFound && { color: "#2E7D32", fontWeight: "bold" }]}>Status: {match.reportDetails.status}</Text>
+              <Text style={styles.reportText} numberOfLines={2}>Last Seen: {match.reportDetails.last_seen}</Text>
             </View>
           </View>
         )}
-
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Confidence:</Text>
-          <Text style={[styles.detailValue, styles.confidenceText]}>
-            {confidencePercentage}%
-          </Text>
-        </View>
-
+        <View style={styles.detailRow}><Text style={styles.detailLabel}>Confidence:</Text><Text style={[styles.detailValue, styles.confidenceText]}>{confidencePercentage}%</Text></View>
         <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[
-              styles.confirmButton,
-              isAlreadyFound && styles.disabledButton,
-            ]}
-            onPress={() => onAction(true, match)}
-            disabled={isAlreadyFound}
-          >
-            <Text style={styles.buttonText}>
-              {isAlreadyFound ? "Already Found" : "✓ Confirm Match"}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.rejectButton}
-            onPress={() => onAction(false, match)}
-          >
-            <Text style={styles.rejectButtonText}>✗ Not a Match</Text>
-          </TouchableOpacity>
+          <TouchableOpacity style={[styles.confirmButton, isAlreadyFound && styles.disabledButton]} onPress={() => onAction(true, match)} disabled={isAlreadyFound}><Text style={styles.buttonText}>{isAlreadyFound ? "Already Found" : "✓ Confirm Match"}</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.rejectButton} onPress={() => onAction(false, match)}><Text style={styles.rejectButtonText}>✗ Not a Match</Text></TouchableOpacity>
         </View>
       </View>
     );
-  }
-);
+});
 MatchCard.displayName = "MatchCard";
 
 const styles = StyleSheet.create({
-  // ... (all other styles are unchanged)
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   contentContainer: {
     paddingHorizontal: 20,

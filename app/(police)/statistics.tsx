@@ -141,35 +141,44 @@ export default function PoliceStatisticsScreen() {
   };
 
   const handleExportPdf = async () => {
-    // THIS IS THE CRITICAL CHECK
+    console.log("1. Export button pressed. Platform:", Platform.OS);
+
     if (Platform.OS === 'web') {
-      Alert.alert(
-        "Feature Not Available", 
-        "PDF export is only available on the mobile app (iOS/Android)."
-      );
-      return; // Stop the function here
+      Alert.alert("Feature Not Available", "PDF export is only available on the mobile app.");
+      return;
     }
 
     if (!stats) {
-      Alert.alert("Error", "Statistics data is not available to export.");
+      console.log("2. Export failed: stats object is null.");
+      Alert.alert("Error", "Statistics data is not available.");
       return;
     }
     
     setIsGeneratingPdf(true);
 
     try {
+      console.log("3. Generating HTML content...");
       const htmlContent = generatePdfHtml(stats);
+      
+      console.log("4. Calling Print.printToFileAsync...");
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
+      console.log("5. PDF generated successfully at URI:", uri);
 
-      if (!(await Sharing.isAvailableAsync())) {
+      const isSharingAvailable = await Sharing.isAvailableAsync();
+      console.log("6. Is sharing available on this device?", isSharingAvailable);
+
+      if (!isSharingAvailable) {
         Alert.alert("Error", "Sharing is not available on this device.");
+        setIsGeneratingPdf(false); // Make sure to stop loading
         return;
       }
       
-      await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
+      console.log("7. Calling Sharing.shareAsync...");
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Export Statistics' });
+      console.log("8. Sharing dialog should have opened.");
 
     } catch (error) {
-      console.error("Failed to generate or share PDF:", error);
+      console.error("--- PDF EXPORT FAILED ---:", error);
       Alert.alert("Error", "An error occurred while creating the PDF.");
     } finally {
       setIsGeneratingPdf(false);

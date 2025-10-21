@@ -17,6 +17,7 @@ from datetime import datetime
 from fastapi import FastAPI, Form, HTTPException, BackgroundTasks, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from deepface import DeepFace 
 
 # Import modular components
 from modules.config import (
@@ -26,7 +27,8 @@ from modules.config import (
     UNIDENTIFIED_SIGHTINGS_PATH,
     CAPTURE_DIR,
     MODEL_NAME,
-    CONFIDENCE_THRESHOLD,
+    LIVE_STREAM_CONFIDENCE_THRESHOLD, # Renamed for clarity
+    CONFIDENCE_THRESHOLD, # Keep for file-based search
 )
 from modules.image_processor import ImageProcessor
 from modules.database_manager import DatabaseManager
@@ -64,9 +66,35 @@ database_manager = DatabaseManager()
 face_recognizer = FaceRecognizer(database_manager)
 file_monitor = FileSystemMonitor(database_manager, DB_PATH)
 
+# --- Warm-up Function ---
+def warm_up_deepface_model():
+    """
+    Performs a sacrificial run of DeepFace to load all models into memory.
+    This prevents the first user request from experiencing a long "cold start" delay.
+    """
+    try:
+        logger.info("🔥 Warming up DeepFace models... This may take a minute.")
+        dummy_image = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=")
+        dummy_path = os.path.join(TEMP_UPLOAD_PATH, "warmup.png")
+        with open(dummy_path, "wb") as f:
+            f.write(dummy_image)
+
+        DeepFace.find(
+            img_path=dummy_path,
+            db_path=DB_PATH,
+            model_name=MODEL_NAME,
+            enforce_detection=False,
+            silent=True
+        )
+        
+        os.remove(dummy_path)
+        logger.info("✅ DeepFace models are warm and ready for requests.")
+    except Exception as e:
+        logger.error(f"⚠️ An error occurred during model warm-up: {e}")
+        logger.error("⚠️ The first user request may be slow.")
+
 # --- Utility Functions ---
 async def handle_no_match(temp_file_path: str, message: str):
-    """Saves a photo from a failed match attempt for later review."""
     sighting_filename = f"sighting_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
     destination_path = os.path.join(UNIDENTIFIED_SIGHTINGS_PATH, sighting_filename)
     shutil.copy(temp_file_path, destination_path)
@@ -81,26 +109,23 @@ async def startup_event():
     
     for path in [DB_PATH, TEMP_UPLOAD_PATH, UNIDENTIFIED_SIGHTINGS_PATH, CAPTURE_DIR]:
         os.makedirs(path, exist_ok=True)
+    
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(None, warm_up_deepface_model)
 
     current_images = image_processor.get_image_files(DB_PATH)
     database_manager.state.image_count = len(current_images)
     logger.info(f"Database initialized with {database_manager.state.image_count} images.")
     
-    logger.info(f"Pre-building {MODEL_NAME} model...")
-    try:
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, database_manager.get_or_build_model)
-    except Exception as e:
-        logger.error(f"Could not pre-build model: {e}")
-
     if database_manager.should_rebuild_database():
         logger.info("Database build/update needed...")
         await database_manager.update_database_async()
     else:
         logger.info("Database is up to date.")
 
-    current_loop = asyncio.get_running_loop()
-    if file_monitor.start_monitoring(current_loop):
+    face_recognizer.load_verified_faces_from_pickle()
+
+    if file_monitor.start_monitoring(loop):
         logger.info("File system monitoring started")
 
 @app.on_event("shutdown")
@@ -130,14 +155,11 @@ async def find_match_react_native(file_data: str = Form(...)):
         with open(temp_file_path, "wb") as f:
             f.write(image_data)
 
-        # This call now executes the new, ultra-fast code in face_recognition.py
         result = await face_recognizer.process_face_match(temp_file_path, filename)
 
         if not result.get("match_found"):
             return await handle_no_match(temp_file_path, result.get("message", "No match found"))
         
-        # The result from the new find_match function already contains the 'file_path'
-        # so no extra processing is needed here.
         return result
 
     except Exception as e:
@@ -156,6 +178,7 @@ async def rebuild_database(background_tasks: BackgroundTasks):
     logger.info("Manual full rebuild requested")
     database_manager.state.image_count = 0
     background_tasks.add_task(database_manager.update_database_async)
+    background_tasks.add_task(face_recognizer.load_verified_faces_from_pickle)
     
     return {"success": True, "message": "Full database rebuild scheduled."}
 
@@ -165,7 +188,8 @@ async def database_stats():
     stats = database_manager.get_database_stats()
     stats.update({
         "model_name": MODEL_NAME,
-        "confidence_threshold": CONFIDENCE_THRESHOLD
+        "confidence_threshold": CONFIDENCE_THRESHOLD,
+        "live_stream_confidence_threshold": LIVE_STREAM_CONFIDENCE_THRESHOLD
     })
     if stats.get("last_build_time"):
         stats["last_build_time"] = datetime.fromtimestamp(stats["last_build_time"]).isoformat()
@@ -184,4 +208,4 @@ if __name__ == "__main__":
     print("Features: Modular Architecture + Live WebSocket Streaming")
     print("Server will be available at: http://localhost:8000")
     print("===========================================")
-    uvicorn.run("main:app", host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) # Added reload for convenience
