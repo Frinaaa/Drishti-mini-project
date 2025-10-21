@@ -89,9 +89,9 @@ export default function NgoDashboardScreen() {
                             <Text style={styles.overviewTitle}>AI Matches Checked</Text>
                             <Text style={styles.overviewValue}>{stats.aiMatchesChecked}</Text>
                         </View>
-                        <View style={styles.overviewCard}>
-                            <Ionicons name="send-outline" size={30} color="#850a0a" />
-                            <Text style={styles.overviewTitle}>Reports Sent to Police</Text>
+                         <View style={styles.overviewCard}>
+                            <Ionicons name="shield-checkmark-outline" size={30} color="#850a0a" />
+                            <Text style={styles.overviewTitle}>Total Verified Reports</Text> {/* <-- UPDATED LABEL */}
                             <Text style={styles.overviewValue}>{stats.reportsSent}</Text>
                         </View>
                     </View>
