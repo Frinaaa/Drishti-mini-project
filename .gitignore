@@ -11,7 +11,7 @@ expo-env.d.ts
 
 # Native
 .kotlin/
-*.orig.*
+.orig.
 *.jks
 *.p8
 *.p12
@@ -37,4 +37,8 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
-__pycache__
+_pycache_
+report_metadata.json
+ds_model_vggface_detector_retinaface_aligned_normalization_base_expand_0.pkl
+representations_vgg_face.pkl
+ds_model_vggface_detector_retinaface_aligned_normalization_base_expand_0.pkl
