@@ -7,7 +7,7 @@ const fs = require("fs");
 const nodemailer = require("nodemailer");
 const { MissingReport, Notification, User } = require("../models"); // Ensure User is imported
 const authMiddleware = require('../middleware/auth');
-
+const auth = require('../middleware/auth'); 
 
 // --- (All other code at the top of the file remains the same) ---
 // ... multer setup, nodemailer setup, POST / route, GET / route, GET /recent route ...
@@ -190,18 +190,6 @@ router.get("/statistics", authMiddleware, async (req, res) => {
       }
     ]);
 
-router.get("/:id", async (req, res) => {
-  try {
-    const report = await MissingReport.findById(req.params.id).populate("user", "name email");
-    if (!report) return res.status(404).json({ msg: "Report not found" });
-    res.json(report);
-  } catch (err) {
-    console.error(`DB Error fetching report ${req.params.id}:`, err);
-    res.status(500).send("Server Error");
-  }
-});
-
-
     const activeCaseData = stats[0].activeCases[0] || {};
     const formattedStats = {
       totalReports: stats[0].totalReports[0]?.count || 0,
@@ -221,6 +209,52 @@ router.get("/:id", async (req, res) => {
     res.status(500).json({ msg: "Server error while fetching statistics." });
   }
 });
+router.get('/police-feed', authMiddleware, async (req, res) => {
+    try {
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+        const reports = await MissingReport.find({
+            $or: [
+                // --- THIS IS THE NEW LINE TO ADD ---
+                // 1. Get ALL brand-new reports from the last 24 hours
+                { status: 'Pending NGO Verification', reported_at: { $gte: twentyFourHoursAgo } },
+                // ------------------------------------
+
+                // 2. Get ALL reports that require police action (regardless of age)
+                { status: 'Pending Police Verification' },
+
+                // 3. Get recent updates from the last 24 hours
+                { status: 'Verified', reviewedAt: { $gte: twentyFourHoursAgo } },
+                { status: 'Found', foundAt: { $gte: twentyFourHoursAgo } },
+                { status: 'Rejected', reviewedAt: { $gte: twentyFourHoursAgo } }
+            ]
+        })
+        .populate('user', 'name')
+        .sort({ reported_at: -1 });
+
+        res.json(reports);
+
+    } catch (err) {
+        console.error('Error fetching police feed:', err.message);
+        res.status(500).send('Server Error');
+    }
+});
+router.get("/:id", async (req, res) => {
+  try {
+    const report = await MissingReport.findById(req.params.id).populate("user", "name email");
+    if (!report) return res.status(404).json({ msg: "Report not found" });
+    res.json(report);
+  } catch (err) {
+    console.error(`DB Error fetching report ${req.params.id}:`, err);
+    res.status(500).send("Server Error");
+  }
+});
+
+
+// =========================================================================
+// ===          <<< DYNAMIC '/:id' ROUTE MUST COME AFTER >>>             ===
+// =========================================================================
+
 
 
 // --- STATUS UPDATE LOGIC ---
@@ -279,5 +313,6 @@ async function updateReportStatus(req, res, newStatus) {
 router.put("/verify/:id", authMiddleware, (req, res) => updateReportStatus(req, res, "Verified"));
 router.put("/reject/:id", authMiddleware, (req, res) => updateReportStatus(req, res, "Rejected"));
 router.put("/found/:id", authMiddleware, (req, res) => updateReportStatus(req, res, "Found"));
+ 
 
 module.exports = router;

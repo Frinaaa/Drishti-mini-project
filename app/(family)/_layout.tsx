@@ -43,13 +43,7 @@ export default function FamilyTabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="home-outline" color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="status"
-        options={{
-          title: 'Status',
-          tabBarIcon: ({ color }) => <TabBarIcon name="list-outline" color={color} />,
-        }}
-      />
+      
       <Tabs.Screen
         name="profile"
         options={{

@@ -110,16 +110,16 @@ router.get('/dashboard-stats', authMiddleware, async (req, res) => {
     try {
         const loggedInNgoId = new mongoose.Types.ObjectId(req.user.id);
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Use the getTodayDateBoundaries function for consistent date boundaries
+        const { startOfDay, endOfDay } = getTodayDateBoundaries();
 
         // --- DEFINE THE DATABASE QUERIES ---
 
         // 1. Photos Reviewed Today (Counts 'Verified' OR 'Rejected' actions today)
         const photosReviewedTodayPromise = MissingReport.countDocuments({
             reviewedByNgo: loggedInNgoId,
-            reviewedAt: { $gte: today },
-            
+            reviewedAt: { $gte: startOfDay, $lt: endOfDay },
+
         });
 
         // 2. AI Matches Checked (Counts reports this NGO marked as 'Found')
@@ -132,11 +132,10 @@ router.get('/dashboard-stats', authMiddleware, async (req, res) => {
         // ===          THIS IS THE MODIFIED LOGIC FOR YOUR COUNTER              ===
         // =========================================================================
         // 3. Total Verified Reports (The new "Reports Sent to Police" metric)
-        // This is a TOTAL count of all reports ever verified by this NGO.
+        // This is a TOTAL count of all reports that are verified (not NGO-specific).
         // It is NOT limited by today's date.
         const totalVerifiedReportsPromise = MissingReport.countDocuments({
-            reviewedByNgo: loggedInNgoId,
-            status: 'Verified', // We now count reports with the "Verified" status
+            status: 'Verified', // Count all reports with "Verified" status
         });
         // =========================================================================
 
@@ -155,7 +154,7 @@ router.get('/dashboard-stats', authMiddleware, async (req, res) => {
         res.json({
             photosReviewedToday,
             aiMatchesChecked,
-            reportsSentToPolice: totalVerifiedReports, // Keep the key for now to avoid breaking the frontend initially
+            reportsSent: totalVerifiedReports, // Changed from reportsSentToPolice to reportsSent to match frontend
         });
 
     } catch (error) {
