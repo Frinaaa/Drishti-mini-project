@@ -1,9 +1,9 @@
 {
-    "last_build_timestamp": "2025-10-21T00:51:26.695249",
+    "last_build_timestamp": "2025-10-21T12:11:12.640546",
     "total_images_in_directory": 16,
-    "verified_reports_from_backend": 4,
+    "verified_reports_from_backend": 5,
     "successfully_indexed_for_search": 4,
-    "skipped_during_processing": 0,
+    "skipped_during_processing": 1,
     "image_handling_details": {
         "1759538068212-9k=.jpg": {
             "status": "IGNORED",
@@ -30,6 +30,10 @@
             "reason": "Image is from a verified report and a face was successfully processed."
         },
         "1760375393213-579554835.jpg": {
+            "status": "INDEXED",
+            "reason": "Image is from a verified report and a face was successfully processed."
+        },
+        "1760627672490-680269179.jpg": {
             "status": "IGNORED",
             "reason": "Image is not from a 'Verified' report and was correctly excluded from the search index."
         },
@@ -60,10 +64,6 @@
         "1760963786012-591593822.jpg": {
             "status": "IGNORED",
             "reason": "Image is not from a 'Verified' report and was correctly excluded from the search index."
-        },
-        "1761046030492-411864849.jpg": {
-            "status": "INDEXED",
-            "reason": "Image is from a verified report and a face was successfully processed."
         },
         "1761050978656-693674672.jpg": {
             "status": "IGNORED",
