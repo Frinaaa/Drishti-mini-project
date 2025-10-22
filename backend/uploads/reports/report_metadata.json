@@ -1,8 +1,8 @@
 {
-    "last_build_timestamp": "2025-10-21T00:51:26.695249",
-    "total_images_in_directory": 16,
-    "verified_reports_from_backend": 4,
-    "successfully_indexed_for_search": 4,
+    "last_build_timestamp": "2025-10-21T12:17:17.387168",
+    "total_images_in_directory": 19,
+    "verified_reports_from_backend": 6,
+    "successfully_indexed_for_search": 6,
     "skipped_during_processing": 0,
     "image_handling_details": {
         "1759538068212-9k=.jpg": {
@@ -10,8 +10,8 @@
             "reason": "Image is not from a 'Verified' report and was correctly excluded from the search index."
         },
         "1759544700776-9k=.jpg": {
-            "status": "IGNORED",
-            "reason": "Image is not from a 'Verified' report and was correctly excluded from the search index."
+            "status": "INDEXED",
+            "reason": "Image is from a verified report and a face was successfully processed."
         },
         "1759557776040-24584417.jpg": {
             "status": "IGNORED",
@@ -30,8 +30,8 @@
             "reason": "Image is from a verified report and a face was successfully processed."
         },
         "1760375393213-579554835.jpg": {
-            "status": "IGNORED",
-            "reason": "Image is not from a 'Verified' report and was correctly excluded from the search index."
+            "status": "INDEXED",
+            "reason": "Image is from a verified report and a face was successfully processed."
         },
         "1760793085728-570219674.jpg": {
             "status": "IGNORED",
@@ -62,12 +62,24 @@
             "reason": "Image is not from a 'Verified' report and was correctly excluded from the search index."
         },
         "1761046030492-411864849.jpg": {
-            "status": "INDEXED",
-            "reason": "Image is from a verified report and a face was successfully processed."
+            "status": "IGNORED",
+            "reason": "Image is not from a 'Verified' report and was correctly excluded from the search index."
         },
         "1761050978656-693674672.jpg": {
             "status": "IGNORED",
             "reason": "Image is not from a 'Verified' report and was correctly excluded from the search index."
+        },
+        "1761087189896-34923187.jpg": {
+            "status": "IGNORED",
+            "reason": "Image is not from a 'Verified' report and was correctly excluded from the search index."
+        },
+        "1761087229127-276571994.jpg": {
+            "status": "IGNORED",
+            "reason": "Image is not from a 'Verified' report and was correctly excluded from the search index."
+        },
+        "1761087847485-794542111.jpg": {
+            "status": "INDEXED",
+            "reason": "Image is from a verified report and a face was successfully processed."
         }
     }
 }
